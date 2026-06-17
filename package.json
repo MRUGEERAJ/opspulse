@@ -1,0 +1,14 @@
+{
+  "name": "opspulse",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.3",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --if-present dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck"
+  }
+}

@@ -170,3 +170,61 @@ OpsPulse is an offline-first field operations platform. Admins create work order
 - [Domain model](docs/domain-model.md)
 - [Interview guide](docs/interview-guide.md)
 
+## Monorepo Foundation
+
+OpsPulse uses a pnpm workspace so the backend, admin web app, future mobile app,
+and shared TypeScript contracts can live in one product repository.
+
+```text
+apps/
+  api/       NestJS backend API
+  web/       React admin/control tower
+  mobile/    React Native FieldAgent app placeholder
+packages/
+  shared/    Shared TypeScript contracts and constants
+```
+
+### Setup
+
+```bash
+corepack enable
+corepack prepare pnpm@10.34.3 --activate
+pnpm install
+
+pnpm --filter @opspulse/shared build
+pnpm typecheck
+pnpm build
+```
+
+Because `@opspulse/shared` exports from `dist`, build it before starting apps
+that import it:
+
+```bash
+pnpm --filter @opspulse/shared build
+pnpm --filter @opspulse/api dev
+pnpm --filter @opspulse/web dev
+```
+
+Expected local URLs:
+
+- API health: `http://localhost:3000/health`
+- Web app: Vite prints the local URL, usually `http://localhost:5173`
+
+### Why Monorepos Matter
+
+Real full-stack product teams often need to change backend contracts, web UI,
+mobile flows, and shared types together. A monorepo makes those changes easier to
+review and test in one place.
+
+For OpsPulse, shared role names and work order statuses live in
+`@opspulse/shared` instead of being duplicated across the API and UI. The
+important trade-off is discipline: apps should not import each other, and shared
+packages should stay focused on stable contracts rather than becoming a dumping
+ground for unrelated business logic.
+
+Interview explanation:
+
+> I used a pnpm monorepo so the API, web app, mobile app, and shared TypeScript
+> contracts can evolve together. It reduces duplicated constants and makes
+> cross-app changes reviewable in one commit, while still keeping clear
+> boundaries between product surfaces.
