@@ -1,13 +1,33 @@
 import "reflect-metadata";
 
+import { RequestMethod, ValidationPipe } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module.js";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
 
-const port = Number(process.env.PORT ?? 3000);
-const host = process.env.HOST ?? "127.0.0.1";
 const app = await NestFactory.create(AppModule);
+const configService = app.get(ConfigService);
+const port = configService.getOrThrow<number>("PORT");
+const host = configService.getOrThrow<string>("HOST");
+const apiPrefix = configService.getOrThrow<string>("API_PREFIX");
+
+app.setGlobalPrefix(apiPrefix, {
+  exclude: [{ path: "health", method: RequestMethod.GET }]
+});
+
+app.useGlobalPipes(
+  new ValidationPipe({
+    whitelist: true,
+    transform: true,
+    forbidNonWhitelisted: true
+  })
+);
+
+app.useGlobalFilters(new HttpExceptionFilter());
 
 await app.listen(port, host);
 
 console.log(`OpsPulse API listening on http://${host}:${port}`);
+console.log(`Health check available at http://${host}:${port}/health`);
