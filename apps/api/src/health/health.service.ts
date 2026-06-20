@@ -1,10 +1,15 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { OPSPULSE_APP } from "@opspulse/shared";
 
+import { PrismaService } from "../prisma/prisma.service.js";
+
 @Injectable()
 export class HealthService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService
+  ) {}
 
   getHealth() {
     return {
@@ -14,5 +19,19 @@ export class HealthService {
       environment: this.configService.getOrThrow<string>("NODE_ENV"),
       timestamp: new Date().toISOString()
     };
+  }
+
+  async getReadiness() {
+    try {
+      await this.prismaService.$queryRaw`SELECT 1`;
+
+      return {
+        status: "ready",
+        database: "up",
+        timestamp: new Date().toISOString()
+      };
+    } catch {
+      throw new ServiceUnavailableException("Database is unavailable");
+    }
   }
 }

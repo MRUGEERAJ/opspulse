@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @opspulse/shared build && tsc -p tsconfig.build.json && node dist/main.js",
-    "build": "pnpm --filter @opspulse/shared build && tsc -p tsconfig.build.json",
+    "dev": "pnpm prisma:generate && pnpm --filter @opspulse/shared build && tsc -p tsconfig.build.json && node dist/main.js",
+    "build": "pnpm prisma:generate && pnpm --filter @opspulse/shared build && tsc -p tsconfig.build.json",
+    "prisma:generate": "prisma generate --config prisma.config.ts",
+    "prisma:migrate": "prisma migrate dev --config prisma.config.ts",
+    "prisma:status": "prisma migrate status --config prisma.config.ts",
+    "prisma:studio": "prisma studio --config prisma.config.ts",
+    "prisma:validate": "prisma validate --config prisma.config.ts",
     "typecheck": "pnpm --filter @opspulse/shared build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -14,13 +19,18 @@
     "@nestjs/core": "11.1.27",
     "@nestjs/platform-express": "11.1.27",
     "@opspulse/shared": "workspace:*",
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
+    "dotenv": "17.4.2",
+    "pg": "8.22.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },
   "devDependencies": {
     "@types/node": "25.9.3",
+    "prisma": "7.8.0",
     "typescript": "6.0.3"
   }
 }

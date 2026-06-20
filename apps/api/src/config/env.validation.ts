@@ -11,6 +11,7 @@ export type ApiEnvironment = Record<string, unknown> & {
   API_PREFIX: string;
   SERVICE_NAME: string;
   LOG_LEVEL: LogLevel;
+  DATABASE_URL: string;
 };
 
 export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
@@ -20,6 +21,7 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
   const apiPrefix = normalizeApiPrefix(readString(config, "API_PREFIX", "api/v1"));
   const serviceName = readString(config, "SERVICE_NAME", "OpsPulse API");
   const logLevel = readString(config, "LOG_LEVEL", "log").toLowerCase();
+  const databaseUrl = readRequiredString(config, "DATABASE_URL");
 
   if (!isOneOf(nodeEnv, NODE_ENV_VALUES)) {
     throw new Error(`NODE_ENV must be one of: ${NODE_ENV_VALUES.join(", ")}`);
@@ -29,6 +31,8 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
     throw new Error(`LOG_LEVEL must be one of: ${LOG_LEVEL_VALUES.join(", ")}`);
   }
 
+  validatePostgresUrl(databaseUrl);
+
   return {
     ...config,
     NODE_ENV: nodeEnv,
@@ -36,7 +40,8 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
     PORT: port,
     API_PREFIX: apiPrefix,
     SERVICE_NAME: serviceName,
-    LOG_LEVEL: logLevel
+    LOG_LEVEL: logLevel,
+    DATABASE_URL: databaseUrl
   };
 }
 
@@ -62,6 +67,30 @@ function readString(
   }
 
   return trimmed;
+}
+
+function readRequiredString(config: Record<string, unknown>, key: string): string {
+  const value = config[key];
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${key} is required`);
+  }
+
+  return value.trim();
+}
+
+function validatePostgresUrl(value: string): void {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL");
+  }
+
+  if (url.protocol !== "postgresql:" && url.protocol !== "postgres:") {
+    throw new Error("DATABASE_URL must use the postgresql:// or postgres:// protocol");
+  }
 }
 
 function readPort(value: string): number {

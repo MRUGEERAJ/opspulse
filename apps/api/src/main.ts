@@ -14,7 +14,10 @@ const host = configService.getOrThrow<string>("HOST");
 const apiPrefix = configService.getOrThrow<string>("API_PREFIX");
 
 app.setGlobalPrefix(apiPrefix, {
-  exclude: [{ path: "health", method: RequestMethod.GET }]
+  exclude: [
+    { path: "health", method: RequestMethod.GET },
+    { path: "health/ready", method: RequestMethod.GET }
+  ]
 });
 
 app.useGlobalPipes(
@@ -26,8 +29,10 @@ app.useGlobalPipes(
 );
 
 app.useGlobalFilters(new HttpExceptionFilter());
+app.enableShutdownHooks();
 
 await app.listen(port, host);
 
 console.log(`OpsPulse API listening on http://${host}:${port}`);
 console.log(`Health check available at http://${host}:${port}/health`);
+console.log(`Readiness check available at http://${host}:${port}/health/ready`);
