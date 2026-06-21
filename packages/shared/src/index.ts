@@ -15,3 +15,6 @@ export const WORK_ORDER_STATUSES = [
   "CANCELLED"
 ] as const;
 export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
+
+export const WORK_ORDER_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
+export type WorkOrderPriority = (typeof WORK_ORDER_PRIORITIES)[number];

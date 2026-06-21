@@ -8,6 +8,7 @@
     "build": "pnpm prisma:generate && pnpm --filter @opspulse/shared build && tsc -p tsconfig.build.json",
     "prisma:generate": "prisma generate --config prisma.config.ts",
     "prisma:migrate": "prisma migrate dev --config prisma.config.ts",
+    "prisma:seed": "prisma db seed --config prisma.config.ts",
     "prisma:status": "prisma migrate status --config prisma.config.ts",
     "prisma:studio": "prisma studio --config prisma.config.ts",
     "prisma:validate": "prisma validate --config prisma.config.ts",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@types/node": "25.9.3",
     "prisma": "7.8.0",
+    "tsx": "4.22.4",
     "typescript": "6.0.3"
   }
 }
