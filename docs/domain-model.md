@@ -254,51 +254,59 @@ This is intentionally conservative. It is easier to explain, safer for v1, and c
 
 ```mermaid
 erDiagram
-  User ||--o{ WorkOrderAssignment : assigned_to
-  User ||--o{ WorkOrderAssignment : assigned_by
-  User ||--o{ OfflineSyncAction : submits
-  User ||--o{ ProofPhoto : uploads
-  User ||--o{ LocationPing : captures
-  User ||--o{ QrScan : scans
+  Organization ||--o{ User : has
+  Organization ||--o{ WorkOrder : owns
+  Organization ||--o{ Assignment : scopes
+  Organization ||--o{ WorkOrderStatusHistory : scopes
+  Organization ||--o{ Attachment : scopes
+  Organization ||--o{ AuditLog : scopes
+  Organization ||--o{ RefreshToken : scopes
+
+  User ||--o{ WorkOrder : creates
+  User ||--o{ Assignment : assigned_to
+  User ||--o{ Assignment : assigned_by
+  User ||--o{ WorkOrderStatusHistory : changes
+  User ||--o{ Attachment : uploads
   User ||--o{ AuditLog : actor
+  User ||--o{ RefreshToken : owns
 
-  WorkOrder ||--o{ WorkOrderAssignment : has
+  WorkOrder ||--o{ Assignment : has
   WorkOrder ||--o{ WorkOrderStatusHistory : records
-  WorkOrder ||--o{ OfflineSyncAction : receives
-  WorkOrder ||--o{ ProofPhoto : has
-  WorkOrder ||--o{ LocationPing : has
-  WorkOrder ||--o{ QrScan : has
+  WorkOrder ||--o{ Attachment : has
   WorkOrder ||--o{ AuditLog : has
-
-  SlaPolicy ||--o{ WorkOrder : applies_to
-  JobRun ||--o{ AuditLog : may_create
+  RefreshToken o|--o| RefreshToken : rotates_to
 ```
 
 Relationship notes:
 
-- `User` has many `WorkOrderAssignment` records as both assignee and assigner.
+- Every tenant-owned record has an `organizationId`.
+- `User` has many `Assignment` records as both assignee and assigner.
+- `Assignment.unassignedAt = null` means the current assignment; it does not
+  mean the WorkOrder is incomplete.
 - `WorkOrder` has many `WorkOrderStatusHistory` rows.
-- `WorkOrder` has many `ProofPhoto`, `LocationPing`, `QrScan`, and `AuditLog` rows.
-- `OfflineSyncAction` belongs to the submitting `User` and usually targets one `WorkOrder`.
-- `ProofPhoto` belongs to a `WorkOrder` and the uploading `User`.
+- `WorkOrder` has many `Attachment` and `AuditLog` rows.
+- `Attachment` belongs to a `WorkOrder` and its uploading `User`.
 - `AuditLog` belongs to a `WorkOrder` when the event is work-order related.
-- `SlaPolicy` can apply to many work orders.
-- `JobRun` records background job attempts and may create audit logs for system events.
+- `RefreshToken` stores only a token hash and can point to its replacement
+  during token rotation.
+- `OfflineSyncAction`, `LocationPing`, `QrScan`, `SlaPolicy`, and `JobRun` are
+  intentionally deferred to focused later migrations.
 
 ## Database Constraints
 
-These constraints should guide the first Prisma schema and migration.
+These constraints are implemented by the core Prisma schema and migration.
 
 | Entity | Constraint |
 | --- | --- |
-| `OfflineSyncAction` | `userId + deviceId + clientActionId` should be unique for idempotency. |
+| `Organization` | `slug` is globally unique and must be stored as trimmed lowercase text. |
+| `User` | `email` is globally unique, must be stored as trimmed lowercase text, and the user belongs to one Organization. |
 | `WorkOrder` | `status` should be an enum, not free-form text. |
+| `WorkOrder` | Optional latitude and longitude are nullable-safe but range checked when supplied. |
 | `AuditLog` | Append-only from application behavior; reference an actor `User` when user-triggered and optionally reference a `WorkOrder`. |
-| `ProofPhoto` | Must belong to one `WorkOrder` and one uploading `User`. |
-| `WorkOrderAssignment` | Must reference one `WorkOrder`, one assignee `User`, and one assigning `User`. |
+| `Attachment` | Must belong to one `WorkOrder` and one uploading `User`; only object metadata is stored in PostgreSQL. |
+| `Assignment` | Must reference one `WorkOrder`, one assignee, and one assigner; a partial unique index permits only one current assignment. |
 | `WorkOrderStatusHistory` | Must reference one `WorkOrder` and the actor `User` when user-triggered. |
-| `LocationPing` | Must reference one `WorkOrder` and the capturing `User`. |
-| `QrScan` | Must reference one `WorkOrder` and the scanning `User`. |
+| `RefreshToken` | Raw tokens are never stored; token hashes and replacement links are unique. |
 
 Implementation notes:
 
@@ -306,6 +314,29 @@ Implementation notes:
 - Prefer enum columns for stable domain states such as role, work order status, sync status, and action type.
 - Store failure reason codes as stable strings or enums so frontend behavior does not depend on changing message text.
 - Do not hard-delete audit logs during normal application flows.
+- Prisma cannot represent the partial unique assignment index or these CHECK
+  constraints directly. Their migration SQL is commented and must be preserved
+  if the migration is regenerated.
+- Services must normalize email and slug before persistence, scope every query
+  by `organizationId`, and validate cross-organization and role rules.
+
+Safe audit metadata contains a small allow-listed business summary:
+
+```json
+{
+  "fromStatus": "ASSIGNED",
+  "toStatus": "IN_PROGRESS",
+  "source": "API"
+}
+```
+
+Never store passwords, tokens, authorization headers, complete request bodies,
+uncontrolled client payloads, or raw GPS histories in audit metadata.
+
+`OfflineSyncAction` remains planned for the sync-focused migration. It will own
+client-action idempotency, processing status, retry state, duplicate detection,
+and failure details. The current `WorkOrder.version`, status history,
+attachments, and audit logs provide the supporting foundation.
 
 ## API Endpoint Draft
 

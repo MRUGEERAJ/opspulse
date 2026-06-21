@@ -116,7 +116,126 @@ flowchart TD
   ECS --> RDS[(AWS RDS PostgreSQL)]
 ```
 
+## Core Database Model
 
+The core schema is tenant-scoped through `organizationId`. Assignments and
+status changes are stored as history instead of overwriting important business
+facts. Files remain in object storage; PostgreSQL stores attachment metadata
+only.
+
+```mermaid
+erDiagram
+  Organization ||--o{ User : has
+  Organization ||--o{ WorkOrder : owns
+  Organization ||--o{ Assignment : scopes
+  Organization ||--o{ WorkOrderStatusHistory : scopes
+  Organization ||--o{ Attachment : scopes
+  Organization ||--o{ AuditLog : scopes
+  Organization ||--o{ RefreshToken : scopes
+
+  User ||--o{ WorkOrder : creates
+  User ||--o{ Assignment : receives
+  User ||--o{ Assignment : assigns
+  User ||--o{ WorkOrderStatusHistory : changes
+  User ||--o{ Attachment : uploads
+  User ||--o{ AuditLog : acts
+  User ||--o{ RefreshToken : owns
+
+  WorkOrder ||--o{ Assignment : has
+  WorkOrder ||--o{ WorkOrderStatusHistory : records
+  WorkOrder ||--o{ Attachment : has
+  WorkOrder ||--o{ AuditLog : traces
+  RefreshToken o|--o| RefreshToken : rotates_to
+
+  Organization {
+    uuid id PK
+    string name
+    string slug UK
+    boolean isActive
+  }
+
+  User {
+    uuid id PK
+    uuid organizationId FK
+    string email UK
+    string passwordHash
+    UserRole role
+    boolean isActive
+  }
+
+  WorkOrder {
+    uuid id PK
+    uuid organizationId FK
+    uuid createdById FK
+    WorkOrderStatus status
+    WorkOrderPriority priority
+    datetime dueAt
+    decimal latitude
+    decimal longitude
+    int version
+  }
+
+  Assignment {
+    uuid id PK
+    uuid organizationId FK
+    uuid workOrderId FK
+    uuid assigneeId FK
+    uuid assignedById FK
+    datetime assignedAt
+    datetime unassignedAt
+  }
+
+  WorkOrderStatusHistory {
+    uuid id PK
+    uuid organizationId FK
+    uuid workOrderId FK
+    uuid actorUserId FK
+    WorkOrderStatus fromStatus
+    WorkOrderStatus toStatus
+    StatusChangeSource source
+  }
+
+  Attachment {
+    uuid id PK
+    uuid organizationId FK
+    uuid workOrderId FK
+    uuid uploadedById FK
+    string objectKey UK
+    AttachmentType type
+    AttachmentUploadStatus uploadStatus
+  }
+
+  AuditLog {
+    uuid id PK
+    uuid organizationId FK
+    uuid actorUserId FK
+    uuid workOrderId FK
+    string action
+    json metadata
+    datetime occurredAt
+  }
+
+  RefreshToken {
+    uuid id PK
+    uuid organizationId FK
+    uuid userId FK
+    string tokenHash UK
+    uuid tokenFamilyId
+    uuid replacedByTokenId FK
+    datetime expiresAt
+    datetime revokedAt
+  }
+```
+
+Important database invariants:
+
+- Email and organization slug must already be trimmed lowercase values.
+- A WorkOrder can have only one current Assignment (`unassignedAt IS NULL`).
+- Optional coordinates are accepted, but supplied latitude and longitude must
+  be within valid geographic ranges.
+- `organizationId` must scope every future repository query.
+- `OfflineSyncAction` is intentionally deferred to the sync-focused migration;
+  `WorkOrder.version`, history, attachments, and audit logs prepare for it.
 
 ## Local Development Roadmap
 
@@ -151,11 +270,12 @@ No AWS resources are created in this repository yet.
 | ---------------------- | ----------- |
 | Product scope          | Defined     |
 | Architecture           | Defined     |
-| Domain model           | Defined     |
-| Backend implementation | Not started |
+| Domain model           | Implemented |
+| Backend foundation     | Implemented |
+| Core database model    | Implemented |
 | Web implementation     | Not started |
 | Mobile implementation  | Not started |
-| Docker setup           | Not started |
+| Docker PostgreSQL      | Implemented |
 | AWS deployment         | Not started |
 
 

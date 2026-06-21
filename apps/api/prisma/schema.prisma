@@ -29,35 +29,194 @@ enum WorkOrderStatus {
   CANCELLED
 }
 
-model User {
-  id             String      @id @default(uuid()) @db.Uuid
-  email          String      @unique
-  passwordHash   String      @map("password_hash")
-  name           String
-  role           UserRole
-  isActive       Boolean     @default(true) @map("is_active")
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  createdOrders  WorkOrder[] @relation("WorkOrderCreator")
+enum StatusChangeSource {
+  API
+  OFFLINE_SYNC
+  SYSTEM
+}
 
-  @@index([role, isActive])
+enum AttachmentType {
+  PROOF_PHOTO
+  DOCUMENT
+}
+
+enum AttachmentUploadStatus {
+  PENDING
+  UPLOADED
+  FAILED
+}
+
+model Organization {
+  id              String                   @id @default(uuid()) @db.Uuid
+  name            String
+  slug            String                   @unique
+  isActive        Boolean                  @default(true) @map("is_active")
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  users           User[]
+  workOrders      WorkOrder[]
+  assignments     Assignment[]
+  statusHistories WorkOrderStatusHistory[]
+  attachments     Attachment[]
+  auditLogs       AuditLog[]
+  refreshTokens   RefreshToken[]
+
+  @@map("organizations")
+}
+
+model User {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  organizationId      String                   @map("organization_id") @db.Uuid
+  email               String                   @unique
+  passwordHash        String                   @map("password_hash")
+  name                String
+  role                UserRole
+  isActive            Boolean                  @default(true) @map("is_active")
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdOrders       WorkOrder[]              @relation("WorkOrderCreator")
+  assignmentsReceived Assignment[]             @relation("AssignmentAssignee")
+  assignmentsCreated  Assignment[]             @relation("AssignmentAssigner")
+  statusChanges       WorkOrderStatusHistory[] @relation("StatusHistoryActor")
+  uploadedAttachments Attachment[]             @relation("AttachmentUploader")
+  auditLogs           AuditLog[]               @relation("AuditActor")
+  refreshTokens       RefreshToken[]
+
+  @@index([organizationId, role, isActive])
   @@map("users")
 }
 
 model WorkOrder {
-  id          String            @id @default(uuid()) @db.Uuid
-  title       String
-  description String?
-  priority    WorkOrderPriority @default(MEDIUM)
-  status      WorkOrderStatus   @default(CREATED)
-  dueAt       DateTime?         @map("due_at") @db.Timestamptz(3)
-  createdById String            @map("created_by_id") @db.Uuid
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  createdBy   User              @relation("WorkOrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  id                 String                   @id @default(uuid()) @db.Uuid
+  organizationId     String                   @map("organization_id") @db.Uuid
+  title              String
+  description        String?
+  priority           WorkOrderPriority        @default(MEDIUM)
+  status             WorkOrderStatus          @default(CREATED)
+  dueAt              DateTime?                @map("due_at") @db.Timestamptz(3)
+  siteAddress        String?                  @map("site_address")
+  latitude           Decimal?                 @db.Decimal(9, 6)
+  longitude          Decimal?                 @db.Decimal(10, 6)
+  requiresProofPhoto Boolean                  @default(false) @map("requires_proof_photo")
+  requiresLocation   Boolean                  @default(false) @map("requires_location")
+  requiresQrScan     Boolean                  @default(false) @map("requires_qr_scan")
+  version            Int                      @default(1)
+  createdById        String                   @map("created_by_id") @db.Uuid
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy          User                     @relation("WorkOrderCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignments        Assignment[]
+  statusHistory      WorkOrderStatusHistory[]
+  attachments        Attachment[]
+  auditLogs          AuditLog[]
 
-  @@index([status])
-  @@index([dueAt])
+  @@index([organizationId, status, updatedAt])
+  @@index([organizationId, dueAt])
   @@index([createdById])
   @@map("work_orders")
+}
+
+model Assignment {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  workOrderId    String       @map("work_order_id") @db.Uuid
+  assigneeId     String       @map("assignee_id") @db.Uuid
+  assignedById   String       @map("assigned_by_id") @db.Uuid
+  assignedAt     DateTime     @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  unassignedAt   DateTime?    @map("unassigned_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder      WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  assignee       User         @relation("AssignmentAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  assignedBy     User         @relation("AssignmentAssigner", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, assigneeId, unassignedAt])
+  @@index([workOrderId, assignedAt])
+  @@map("assignments")
+}
+
+model WorkOrderStatusHistory {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  workOrderId    String             @map("work_order_id") @db.Uuid
+  actorUserId    String?            @map("actor_user_id") @db.Uuid
+  fromStatus     WorkOrderStatus?   @map("from_status")
+  toStatus       WorkOrderStatus    @map("to_status")
+  source         StatusChangeSource @default(API)
+  reason         String?
+  changedAt      DateTime           @default(now()) @map("changed_at") @db.Timestamptz(3)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder      WorkOrder          @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  actor          User?              @relation("StatusHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId, changedAt])
+  @@index([organizationId, changedAt])
+  @@map("work_order_status_history")
+}
+
+model Attachment {
+  id               String                 @id @default(uuid()) @db.Uuid
+  organizationId   String                 @map("organization_id") @db.Uuid
+  workOrderId      String                 @map("work_order_id") @db.Uuid
+  uploadedById     String                 @map("uploaded_by_id") @db.Uuid
+  type             AttachmentType
+  uploadStatus     AttachmentUploadStatus @default(PENDING) @map("upload_status")
+  objectKey        String                 @unique @map("object_key")
+  originalFilename String                 @map("original_filename")
+  mimeType         String                 @map("mime_type")
+  sizeBytes        Int                    @map("size_bytes")
+  checksum         String?
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder        WorkOrder              @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  uploadedBy       User                   @relation("AttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([workOrderId, createdAt])
+  @@index([organizationId, uploadStatus])
+  @@map("attachments")
+}
+
+model AuditLog {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  actorUserId    String?      @map("actor_user_id") @db.Uuid
+  workOrderId    String?      @map("work_order_id") @db.Uuid
+  action         String
+  targetType     String?      @map("target_type")
+  targetId       String?      @map("target_id")
+  metadata       Json?
+  requestId      String?      @map("request_id")
+  occurredAt     DateTime     @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actor          User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  workOrder      WorkOrder?   @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, occurredAt])
+  @@index([targetType, targetId, occurredAt])
+  @@index([workOrderId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("audit_logs")
+}
+
+model RefreshToken {
+  id                String        @id @default(uuid()) @db.Uuid
+  organizationId    String        @map("organization_id") @db.Uuid
+  userId            String        @map("user_id") @db.Uuid
+  tokenHash         String        @unique @map("token_hash")
+  tokenFamilyId     String        @default(uuid()) @map("token_family_id") @db.Uuid
+  expiresAt         DateTime      @map("expires_at") @db.Timestamptz(3)
+  revokedAt         DateTime?     @map("revoked_at") @db.Timestamptz(3)
+  revocationReason  String?       @map("revocation_reason")
+  replacedByTokenId String?       @unique @map("replaced_by_token_id") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedByToken   RefreshToken? @relation("RefreshTokenReplacement", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replacesToken     RefreshToken? @relation("RefreshTokenReplacement")
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([organizationId, tokenFamilyId])
+  @@map("refresh_tokens")
 }

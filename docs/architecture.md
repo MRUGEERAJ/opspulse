@@ -68,17 +68,31 @@ controller -> service -> repository/Prisma
 
 | Entity | Purpose |
 | --- | --- |
-| User | Stores login identity, role, name, email, and active status. |
-| WorkOrder | Main job record with title, description, priority, status, due date, and location. |
-| WorkOrderAssignment | Tracks which FieldAgent owns a work order and who assigned it. |
+| Organization | Tenant boundary that owns users and operational data. |
+| User | Stores organization-scoped login identity, role, name, email, and active status. |
+| WorkOrder | Main job record with status, priority, due date, location, completion requirements, and version. |
+| Assignment | Preserves current and historical FieldAgent assignment decisions. |
 | WorkOrderStatusHistory | Stores status changes over time. |
+| Attachment | Stores S3 object metadata for proof photos and documents linked to work orders. |
+| AuditLog | Stores immutable business events such as created, assigned, completed, and failed. |
+| RefreshToken | Stores hashed, revocable, and rotatable login-session tokens. |
+
+Planned in later focused migrations:
+
+| Entity | Purpose |
+| --- | --- |
 | OfflineSyncAction | Stores mobile sync actions, processing status, and failure reason. |
-| ProofPhoto | Stores metadata for proof photo uploads linked to work orders. |
 | LocationPing | Stores captured latitude/longitude at meaningful job events. |
 | QrScan | Stores scanned QR value and the related work order. |
-| AuditLog | Stores immutable events like created, assigned, synced, completed, and failed. |
 | SlaPolicy | Stores SLA rules or due-date thresholds. |
 | JobRun | Stores background job execution metadata and failures. |
+
+Every implemented operational entity carries `organizationId`. Repository
+queries must use it as a tenant boundary; indexes improve those queries but do
+not replace authorization checks. PostgreSQL migration SQL also enforces one
+current Assignment per WorkOrder, normalized email/slug values, and
+nullable-safe coordinate ranges because Prisma cannot express those invariants
+directly.
 
 ## React Native Screens
 
