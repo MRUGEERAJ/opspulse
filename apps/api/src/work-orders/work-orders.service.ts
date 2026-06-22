@@ -6,7 +6,7 @@ import {
   NotFoundException
 } from "@nestjs/common";
 
-import type { DevelopmentActor } from "../common/auth-context/development-actor.js";
+import type { AuthenticatedActor } from "../auth/auth.types.js";
 import { UserRole, WorkOrderStatus } from "../generated/prisma/enums.js";
 import { CancelWorkOrderDto } from "./dto/cancel-work-order.dto.js";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto.js";
@@ -34,7 +34,7 @@ const CANCELLABLE_STATUSES = new Set<WorkOrderStatus>([
 export class WorkOrdersService {
   constructor(private readonly workOrdersRepository: WorkOrdersRepository) {}
 
-  async create(actor: DevelopmentActor, dto: CreateWorkOrderDto) {
+  async create(actor: AuthenticatedActor, dto: CreateWorkOrderDto) {
     assertAdmin(actor);
     validateCoordinatePair(dto);
 
@@ -46,7 +46,7 @@ export class WorkOrdersService {
     return toWorkOrderResponse(workOrder);
   }
 
-  async list(actor: DevelopmentActor, query: ListWorkOrdersQueryDto) {
+  async list(actor: AuthenticatedActor, query: ListWorkOrdersQueryDto) {
     assertReader(actor);
 
     // TODO(assignments): restrict Manager reads to their team when team ownership exists.
@@ -72,7 +72,7 @@ export class WorkOrdersService {
     };
   }
 
-  async findOne(actor: DevelopmentActor, id: string) {
+  async findOne(actor: AuthenticatedActor, id: string) {
     assertReader(actor);
     const workOrder = await this.findOrThrow(actor.organizationId, id);
 
@@ -80,7 +80,7 @@ export class WorkOrdersService {
   }
 
   async update(
-    actor: DevelopmentActor,
+    actor: AuthenticatedActor,
     id: string,
     dto: UpdateWorkOrderDto
   ) {
@@ -114,7 +114,7 @@ export class WorkOrdersService {
   }
 
   async cancel(
-    actor: DevelopmentActor,
+    actor: AuthenticatedActor,
     id: string,
     dto: CancelWorkOrderDto
   ) {
@@ -156,13 +156,13 @@ export class WorkOrdersService {
   }
 }
 
-function assertAdmin(actor: DevelopmentActor): void {
+function assertAdmin(actor: AuthenticatedActor): void {
   if (actor.role !== UserRole.ADMIN) {
     throw new ForbiddenException("Admin role is required");
   }
 }
 
-function assertReader(actor: DevelopmentActor): void {
+function assertReader(actor: AuthenticatedActor): void {
   if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
     throw new ForbiddenException("Admin or Manager role is required");
   }

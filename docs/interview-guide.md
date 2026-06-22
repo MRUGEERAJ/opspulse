@@ -58,6 +58,36 @@ Interview explanation:
 
 > I use role guards for broad permissions, then service-level checks for ownership and business rules. A FieldAgent should not update someone else's work order even if they call the API directly.
 
+### Password Hashing And JWT Authentication
+
+What it is:
+
+Password hashing transforms a password into a one-way value that can be checked
+without storing the original password. A JWT access token is a short-lived,
+signed credential that identifies an authenticated API caller.
+
+Why companies use it:
+
+Password hashes reduce the damage of a database leak, while access tokens let
+clients call protected APIs without sending credentials on every request.
+
+How OpsPulse FieldOps uses it:
+
+OpsPulse uses `bcryptjs` for password hashing and issues a one-hour JWT whose
+payload contains only the user ID. Each protected request verifies the token,
+then reloads the active user and organization from PostgreSQL. Public signup is
+disabled; a seeded Admin provisions Manager and FieldAgent accounts.
+
+Interview explanation:
+
+> I do not store plaintext passwords or trust decoded JWT data blindly. The API verifies the JWT signature, issuer, audience, and expiry, then loads the current user and tenant from the database. This means deactivated users and organizations lose access immediately, and role or tenant changes do not remain stale in an old token.
+
+Trade-off:
+
+`bcryptjs` avoids native installation friction and is appropriate for this
+portfolio project. A larger production system may choose native bcrypt or
+Argon2 after benchmarking its security and performance requirements.
+
 ### DTO Validation
 
 What it is:

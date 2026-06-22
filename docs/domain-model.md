@@ -346,6 +346,7 @@ This is not final code. It is the first backend contract so implementation has d
 
 | Method | Path | Purpose | Roles |
 | --- | --- | --- | --- |
+| `POST` | `/auth/register` | Admin provisions a Manager or FieldAgent in the same organization. | Admin |
 | `POST` | `/auth/login` | Login and receive access token. | Public |
 | `POST` | `/auth/logout` | Client logout or token invalidation hook. | Authenticated |
 | `GET` | `/auth/me` | Return current user profile and role. | Authenticated |

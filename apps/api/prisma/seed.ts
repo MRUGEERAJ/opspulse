@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { hash } from "bcryptjs";
 
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import {
@@ -12,14 +13,35 @@ import {
 config({ path: ".env" });
 
 const connectionString = process.env.DATABASE_URL;
+const demoUserPassword = process.env.DEMO_USER_PASSWORD;
+const passwordHashRounds = Number(process.env.PASSWORD_HASH_ROUNDS ?? "12");
 
 if (!connectionString) {
   throw new Error("DATABASE_URL is required to seed the database");
 }
 
+if (
+  !demoUserPassword ||
+  demoUserPassword.length < 12 ||
+  Buffer.byteLength(demoUserPassword, "utf8") > 72
+) {
+  throw new Error(
+    "DEMO_USER_PASSWORD must be at least 12 characters and at most 72 UTF-8 bytes"
+  );
+}
+
+if (
+  !Number.isInteger(passwordHashRounds) ||
+  passwordHashRounds < 4 ||
+  passwordHashRounds > 15
+) {
+  throw new Error("PASSWORD_HASH_ROUNDS must be an integer between 4 and 15");
+}
+
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString })
 });
+const demoPasswordHash = await hash(demoUserPassword, passwordHashRounds);
 
 const organization = await prisma.organization.upsert({
   where: {
@@ -167,10 +189,11 @@ for (const workOrderData of workOrders) {
 }
 
 console.log("Seed complete.");
-console.log(`x-organization-id: ${organization.id}`);
-console.log(`Admin x-user-id: ${admin.id}`);
-console.log("Manager x-user-id: 20000000-0000-4000-8000-000000000002");
-console.log("FieldAgent x-user-id: 20000000-0000-4000-8000-000000000003");
+console.log(`Demo organization: ${organization.id}`);
+console.log("Login emails:");
+console.log("  admin@opspulse.local");
+console.log("  manager@opspulse.local");
+console.log("  agent@opspulse.local");
 
 await prisma.$disconnect();
 
@@ -188,12 +211,13 @@ async function seedUser(input: {
       organizationId: organization.id,
       name: input.name,
       role: input.role,
-      isActive: true
+      isActive: true,
+      passwordHash: demoPasswordHash
     },
     create: {
       ...input,
       organizationId: organization.id,
-      passwordHash: "development-seed-no-login"
+      passwordHash: demoPasswordHash
     }
   });
 }

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import type { DevelopmentActor } from "../common/auth-context/development-actor.js";
+import type { AuthenticatedActor } from "../auth/auth.types.js";
 import type { WorkOrder } from "../generated/prisma/client.js";
 import type {
   WorkOrderPriority,
@@ -39,7 +39,7 @@ export class WorkOrdersRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
   async create(
-    actor: DevelopmentActor,
+    actor: AuthenticatedActor,
     data: CreateWorkOrderWriteData
   ): Promise<WorkOrder> {
     return this.prismaService.$transaction(async (transaction) => {
@@ -137,7 +137,7 @@ export class WorkOrdersRepository {
   }
 
   async cancel(
-    actor: DevelopmentActor,
+    actor: AuthenticatedActor,
     workOrder: WorkOrder,
     reason: string
   ): Promise<WorkOrder | null> {
