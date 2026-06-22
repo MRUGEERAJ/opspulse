@@ -1,6 +1,9 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { OPSPULSE_APP } from "@opspulse/shared";
+import {
+  OPSPULSE_APP,
+  type HealthResponse
+} from "@opspulse/shared";
 
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -11,7 +14,7 @@ export class HealthService {
     private readonly prismaService: PrismaService
   ) {}
 
-  getHealth() {
+  getHealth(): HealthResponse {
     return {
       status: "ok",
       service: this.configService.getOrThrow<string>("SERVICE_NAME"),

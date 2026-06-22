@@ -9,6 +9,7 @@ export type ApiEnvironment = Record<string, unknown> & {
   HOST: string;
   PORT: number;
   API_PREFIX: string;
+  CORS_ORIGINS: string[];
   SERVICE_NAME: string;
   LOG_LEVEL: LogLevel;
   DATABASE_URL: string;
@@ -19,6 +20,9 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
   const host = readString(config, "HOST", "127.0.0.1");
   const port = readPort(readString(config, "PORT", "3000"));
   const apiPrefix = normalizeApiPrefix(readString(config, "API_PREFIX", "api/v1"));
+  const corsOrigins = readCorsOrigins(
+    readString(config, "CORS_ORIGINS", "http://localhost:5173")
+  );
   const serviceName = readString(config, "SERVICE_NAME", "OpsPulse API");
   const logLevel = readString(config, "LOG_LEVEL", "log").toLowerCase();
   const databaseUrl = readRequiredString(config, "DATABASE_URL");
@@ -39,10 +43,43 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
     HOST: host,
     PORT: port,
     API_PREFIX: apiPrefix,
+    CORS_ORIGINS: corsOrigins,
     SERVICE_NAME: serviceName,
     LOG_LEVEL: logLevel,
     DATABASE_URL: databaseUrl
   };
+}
+
+function readCorsOrigins(value: string): string[] {
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  if (origins.length === 0) {
+    throw new Error("CORS_ORIGINS must contain at least one origin");
+  }
+
+  for (const origin of origins) {
+    let url: URL;
+
+    try {
+      url = new URL(origin);
+    } catch {
+      throw new Error(`CORS_ORIGINS contains an invalid origin: ${origin}`);
+    }
+
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.origin !== origin
+    ) {
+      throw new Error(
+        `CORS_ORIGINS entries must be HTTP(S) origins without paths: ${origin}`
+      );
+    }
+  }
+
+  return [...new Set(origins)];
 }
 
 function readString(

@@ -12,6 +12,11 @@ const configService = app.get(ConfigService);
 const port = configService.getOrThrow<number>("PORT");
 const host = configService.getOrThrow<string>("HOST");
 const apiPrefix = configService.getOrThrow<string>("API_PREFIX");
+const corsOrigins = configService.getOrThrow<string[]>("CORS_ORIGINS");
+
+app.enableCors({
+  origin: corsOrigins
+});
 
 app.setGlobalPrefix(apiPrefix, {
   exclude: [

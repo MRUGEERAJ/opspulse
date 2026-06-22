@@ -273,8 +273,8 @@ No AWS resources are created in this repository yet.
 | Domain model           | Implemented |
 | Backend foundation     | Implemented |
 | Core database model    | Implemented |
-| Web implementation     | Not started |
-| Mobile implementation  | Not started |
+| Web implementation     | Shell implemented |
+| Mobile implementation  | Shell implemented |
 | Docker PostgreSQL      | Implemented |
 | AWS deployment         | Not started |
 
@@ -292,14 +292,14 @@ OpsPulse is an offline-first field operations platform. Admins create work order
 
 ## Monorepo Foundation
 
-OpsPulse uses a pnpm workspace so the backend, admin web app, future mobile app,
+OpsPulse uses a pnpm workspace so the backend, admin web app, mobile app,
 and shared TypeScript contracts can live in one product repository.
 
 ```text
 apps/
   api/       NestJS backend API
   web/       React admin/control tower
-  mobile/    React Native FieldAgent app placeholder
+  mobile/    Bare React Native FieldAgent app
 packages/
   shared/    Shared TypeScript contracts and constants
 ```
@@ -313,22 +313,70 @@ pnpm install
 
 pnpm --filter @opspulse/shared build
 pnpm typecheck
-pnpm build
+pnpm --filter @opspulse/web build
+pnpm --filter @opspulse/api build
 ```
 
-Because `@opspulse/shared` exports from `dist`, build it before starting apps
-that import it:
+Create local frontend configuration files:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+cp apps/mobile/.env.example apps/mobile/.env
+```
+
+Install iOS dependencies once after `pnpm install`:
+
+```bash
+cd apps/mobile
+bundle install
+bundle exec pod install --project-directory=ios
+cd ../..
+```
+
+Because `@opspulse/shared` exports from `dist`, build it before starting an app
+that imports it:
 
 ```bash
 pnpm --filter @opspulse/shared build
 pnpm --filter @opspulse/api dev
 pnpm --filter @opspulse/web dev
+pnpm --filter @opspulse/mobile ios
 ```
 
 Expected local URLs:
 
 - API health: `http://localhost:3000/health`
 - Web app: Vite prints the local URL, usually `http://localhost:5173`
+- Mobile API URL for the iOS simulator: `http://127.0.0.1:3000`
+
+The Android emulator reaches the host machine at `http://10.0.2.2:3000`. A
+physical device must use the development machine's reachable LAN address.
+
+### Frontend Shells
+
+The web app uses feature-oriented folders for authentication, dashboard, and
+work orders. React Router owns URL navigation, while an in-memory demo session
+only demonstrates protected navigation. It is not real authentication.
+
+The mobile app uses a root native stack for login, the authenticated app, and
+job detail. Bottom tabs own Jobs, Offline Queue, and Profile. Real token
+storage, assigned-job loading, offline persistence, camera, location, QR, and
+sync remain deferred.
+
+Both clients use small platform-specific `fetch` wrappers and shared health and
+error response types. Requests time out and expose errors, but they do not retry
+automatically. Users retry explicitly so development failures stay visible.
+
+Browser requests require the API to allow the web origin through CORS. React
+Native uses native networking rather than browser CORS, but it still needs an
+API URL reachable from the simulator or device.
+
+Interview explanation:
+
+> I separated navigation, feature screens, environment configuration, and API
+> access so the shells can grow without turning the root component into a large
+> dependency hub. Frontend route protection improves navigation UX, but the
+> backend remains responsible for authentication, roles, and ownership checks.
 
 ### Why Monorepos Matter
 

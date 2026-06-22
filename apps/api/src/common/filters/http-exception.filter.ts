@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus
 } from "@nestjs/common";
+import type { ApiErrorResponse } from "@opspulse/shared";
 
 type HttpRequest = {
   url: string;
@@ -13,16 +14,8 @@ type HttpRequest = {
 
 type HttpResponse = {
   status: (statusCode: number) => {
-    json: (body: ErrorResponse) => void;
+    json: (body: ApiErrorResponse) => void;
   };
-};
-
-type ErrorResponse = {
-  statusCode: number;
-  timestamp: string;
-  path: string;
-  method: string;
-  message: string | string[];
 };
 
 @Catch()
@@ -42,7 +35,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: request.url,
       method: request.method,
       message: getErrorMessage(exception)
-    } satisfies ErrorResponse);
+    } satisfies ApiErrorResponse);
   }
 }
 

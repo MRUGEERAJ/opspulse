@@ -166,6 +166,77 @@ Interview explanation:
 
 > Docker Compose makes onboarding easier because developers can start the same PostgreSQL and Redis services with one command.
 
+### Frontend Application Structure
+
+What it is:
+
+Feature-oriented structure groups screens and behavior by product capability,
+while application-level folders own navigation and providers.
+
+Why companies use it:
+
+It prevents route setup, API code, business screens, and reusable UI from being
+mixed into one large root component.
+
+How OpsPulse FieldOps uses it:
+
+The web shell separates app routing, authentication, dashboard, work orders,
+environment configuration, and API access. The mobile shell separates the root
+stack, authenticated tabs, screens, shared components, and native environment
+configuration.
+
+Interview explanation:
+
+> I keep navigation and providers at the application boundary, product screens
+> inside feature folders, and HTTP/environment details behind small shared
+> modules. That keeps future auth and offline work localized.
+
+### CORS And Native Networking
+
+What it is:
+
+CORS is a browser security policy controlling whether frontend JavaScript may
+read responses from another origin.
+
+Why companies use it:
+
+APIs should explicitly allow trusted browser origins instead of exposing broad
+cross-origin access.
+
+How OpsPulse FieldOps uses it:
+
+The NestJS API reads a narrow list from `CORS_ORIGINS` for the React web app.
+The React Native app uses native networking, so browser CORS does not apply, but
+the simulator or device must still be able to reach the configured API host.
+
+Interview explanation:
+
+> CORS matters to the browser client, not the native React Native transport. On
+> mobile the common failure is an unreachable localhost address, so I configure
+> the API URL per simulator or device environment.
+
+### Manual Retry
+
+What it is:
+
+Manual retry lets users repeat a failed request explicitly.
+
+Why companies use it:
+
+It is appropriate when an operation is visible and automatic retries could hide
+configuration or availability failures.
+
+How OpsPulse FieldOps uses it:
+
+The Day 7 health checks run once and expose a Retry button. Automatic retry
+policies are deferred until real data synchronization is implemented.
+
+Interview explanation:
+
+> I kept health-check retry explicit during shell development so connection and
+> CORS failures remain observable. Later, background sync can use bounded
+> automatic retries because that workflow has different resilience needs.
+
 ### ECS Fargate
 
 What it is:
