@@ -13,9 +13,7 @@ import {
 } from "class-validator";
 
 import { WorkOrderPriority } from "../../generated/prisma/enums.js";
-
-const trimString = ({ value }: { value: unknown }): unknown =>
-  typeof value === "string" ? value.trim() : value;
+import { trimString } from "./work-order-dto.transforms.js";
 
 export class UpdateWorkOrderDto {
   @Transform(trimString)

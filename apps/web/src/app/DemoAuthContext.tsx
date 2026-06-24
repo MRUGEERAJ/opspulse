@@ -6,16 +6,10 @@ import {
   useState
 } from "react";
 
-type DemoSession = {
-  displayName: string;
-  role: "ADMIN" | "MANAGER";
-};
-
-type DemoAuthContextValue = {
-  session: DemoSession | null;
-  login: () => void;
-  logout: () => void;
-};
+import type {
+  DemoAuthContextValue,
+  DemoSession
+} from "./demo-auth.types";
 
 const DemoAuthContext = createContext<DemoAuthContextValue | null>(null);
 

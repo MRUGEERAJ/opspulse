@@ -1,12 +1,7 @@
-import type { HealthResponse } from "@opspulse/shared";
 import { useCallback, useEffect, useState } from "react";
 
 import { getApiHealth } from "../api/health";
-
-type HealthState =
-  | { status: "loading" }
-  | { status: "success"; data: HealthResponse }
-  | { status: "error"; message: string };
+import type { HealthState } from "./api-health.types";
 
 export function ApiHealthCard() {
   const [healthState, setHealthState] = useState<HealthState>({

@@ -7,11 +7,9 @@ import type { ConfigService } from "@nestjs/config";
 import type { JwtService } from "@nestjs/jwt";
 
 import { UserRole } from "../generated/prisma/enums.js";
-import type {
-  AuthRepository,
-  AuthUserRecord
-} from "./auth.repository.js";
+import type { AuthRepository } from "./auth.repository.js";
 import { AuthService } from "./auth.service.js";
+import type { AuthUserRecord } from "./auth.types.js";
 import type { PasswordService } from "./password.service.js";
 
 const activeUser: AuthUserRecord = {

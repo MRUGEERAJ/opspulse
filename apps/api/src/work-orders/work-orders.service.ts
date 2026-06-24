@@ -1,23 +1,24 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException
 } from "@nestjs/common";
 
 import type { AuthenticatedActor } from "../auth/auth.types.js";
-import { UserRole, WorkOrderStatus } from "../generated/prisma/enums.js";
+import { WorkOrderStatus } from "../generated/prisma/enums.js";
 import { CancelWorkOrderDto } from "./dto/cancel-work-order.dto.js";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto.js";
 import { ListWorkOrdersQueryDto } from "./dto/list-work-orders-query.dto.js";
 import { UpdateWorkOrderDto } from "./dto/update-work-order.dto.js";
 import { toWorkOrderResponse } from "./work-order.mapper.js";
+import { WorkOrdersRepository } from "./work-orders.repository.js";
 import {
-  type CreateWorkOrderWriteData,
-  WorkOrdersRepository,
-  type WorkOrderWriteData
-} from "./work-orders.repository.js";
+  assertAdmin,
+  assertReader,
+  toWriteData,
+  validateCoordinatePair
+} from "./work-orders.utils.js";
 
 const EDITABLE_STATUSES = new Set<WorkOrderStatus>([
   WorkOrderStatus.CREATED,
@@ -154,44 +155,4 @@ export class WorkOrdersService {
 
     return workOrder;
   }
-}
-
-function assertAdmin(actor: AuthenticatedActor): void {
-  if (actor.role !== UserRole.ADMIN) {
-    throw new ForbiddenException("Admin role is required");
-  }
-}
-
-function assertReader(actor: AuthenticatedActor): void {
-  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
-    throw new ForbiddenException("Admin or Manager role is required");
-  }
-}
-
-function validateCoordinatePair(
-  dto: Pick<CreateWorkOrderDto, "latitude" | "longitude">
-): void {
-  const hasLatitude = dto.latitude !== undefined && dto.latitude !== null;
-  const hasLongitude = dto.longitude !== undefined && dto.longitude !== null;
-
-  if (hasLatitude !== hasLongitude) {
-    throw new BadRequestException(
-      "latitude and longitude must be supplied together"
-    );
-  }
-}
-
-function toWriteData(dto: CreateWorkOrderDto): CreateWorkOrderWriteData;
-function toWriteData(dto: UpdateWorkOrderDto): WorkOrderWriteData;
-function toWriteData(
-  dto: CreateWorkOrderDto | UpdateWorkOrderDto
-): WorkOrderWriteData {
-  const { dueAt, ...data } = dto;
-
-  return {
-    ...data,
-    ...(dueAt !== undefined
-      ? { dueAt: dueAt === null ? null : new Date(dueAt) }
-      : {})
-  };
 }

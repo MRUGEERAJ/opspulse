@@ -1,6 +1,7 @@
 import type { WorkOrder } from "../generated/prisma/client.js";
+import type { WorkOrderResponse } from "./work-orders.types.js";
 
-export function toWorkOrderResponse(workOrder: WorkOrder) {
+export function toWorkOrderResponse(workOrder: WorkOrder): WorkOrderResponse {
   return {
     id: workOrder.id,
     organizationId: workOrder.organizationId,

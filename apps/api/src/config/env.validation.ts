@@ -1,32 +1,25 @@
-const NODE_ENV_VALUES = ["development", "test", "production"] as const;
-const LOG_LEVEL_VALUES = ["error", "warn", "log", "debug", "verbose"] as const;
+import type { ApiEnvironment, LogLevel, NodeEnv } from "./config.types.js";
 
-type NodeEnv = (typeof NODE_ENV_VALUES)[number];
-type LogLevel = (typeof LOG_LEVEL_VALUES)[number];
-
-export type ApiEnvironment = Record<string, unknown> & {
-  NODE_ENV: NodeEnv;
-  HOST: string;
-  PORT: number;
-  API_PREFIX: string;
-  CORS_ORIGINS: string[];
-  SERVICE_NAME: string;
-  LOG_LEVEL: LogLevel;
-  DATABASE_URL: string;
-  JWT_SECRET: string;
-  JWT_ISSUER: string;
-  JWT_AUDIENCE: string;
-  JWT_ACCESS_TOKEN_TTL_SECONDS: number;
-  JWT_REFRESH_TOKEN_TTL_SECONDS: number;
-  PASSWORD_HASH_ROUNDS: number;
-  DEMO_USER_PASSWORD?: string;
-};
+const NODE_ENV_VALUES = [
+  "development",
+  "test",
+  "production"
+] as const satisfies readonly NodeEnv[];
+const LOG_LEVEL_VALUES = [
+  "error",
+  "warn",
+  "log",
+  "debug",
+  "verbose"
+] as const satisfies readonly LogLevel[];
 
 export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
   const nodeEnv = readString(config, "NODE_ENV", "development").toLowerCase();
   const host = readString(config, "HOST", "127.0.0.1");
   const port = readPort(readString(config, "PORT", "3000"));
-  const apiPrefix = normalizeApiPrefix(readString(config, "API_PREFIX", "api/v1"));
+  const apiPrefix = normalizeApiPrefix(
+    readString(config, "API_PREFIX", "api/v1")
+  );
   const corsOrigins = readCorsOrigins(
     readString(config, "CORS_ORIGINS", "http://localhost:5173")
   );

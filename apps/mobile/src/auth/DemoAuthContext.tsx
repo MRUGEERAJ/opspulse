@@ -6,11 +6,7 @@ import {
   useState
 } from "react";
 
-type DemoAuthContextValue = {
-  isAuthenticated: boolean;
-  login: () => void;
-  logout: () => void;
-};
+import type { DemoAuthContextValue } from "./demo-auth.types";
 
 const DemoAuthContext = createContext<DemoAuthContextValue | null>(null);
 

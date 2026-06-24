@@ -9,12 +9,10 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { Prisma } from "../generated/prisma/client.js";
 import { actorToSafeUser, toSafeUser } from "./auth.mapper.js";
-import {
-  AuthRepository,
-  type AuthUserRecord
-} from "./auth.repository.js";
+import { AuthRepository } from "./auth.repository.js";
 import type {
   AuthenticatedActor,
+  AuthUserRecord,
   AuthSessionResponse
 } from "./auth.types.js";
 import type { LoginDto } from "./dto/login.dto.js";

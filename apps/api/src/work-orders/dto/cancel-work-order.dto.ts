@@ -1,8 +1,7 @@
 import { Transform } from "class-transformer";
 import { IsString, Length } from "class-validator";
 
-const trimString = ({ value }: { value: unknown }): unknown =>
-  typeof value === "string" ? value.trim() : value;
+import { trimString } from "./work-order-dto.transforms.js";
 
 export class CancelWorkOrderDto {
   @Transform(trimString)

@@ -1,13 +1,8 @@
-import type { AuthenticatedActor, SafeUser } from "./auth.types.js";
-
-type UserForResponse = {
-  id: string;
-  organizationId: string;
-  email: string;
-  name: string;
-  role: SafeUser["role"];
-  isActive: boolean;
-};
+import type {
+  AuthenticatedActor,
+  SafeUser,
+  UserForResponse
+} from "./auth.types.js";
 
 export function toSafeUser(user: UserForResponse): SafeUser {
   return {

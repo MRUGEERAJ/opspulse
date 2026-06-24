@@ -1,8 +1,14 @@
 import { Injectable } from "@nestjs/common";
 
-import type { UserRole } from "../generated/prisma/enums.js";
 import { PrismaService } from "../prisma/prisma.service.js";
-import type { AuthenticatedActor } from "./auth.types.js";
+import type {
+  AuthenticatedActor,
+  AuthUserRecord,
+  CreateRefreshTokenInput,
+  CreateStaffUserInput,
+  RotateRefreshTokenInput,
+  RotateRefreshTokenResult
+} from "./auth.types.js";
 
 const AUTH_USER_SELECT = {
   id: true,
@@ -18,50 +24,6 @@ const AUTH_USER_SELECT = {
     }
   }
 } as const;
-
-export type AuthUserRecord = {
-  id: string;
-  organizationId: string;
-  email: string;
-  passwordHash: string;
-  name: string;
-  role: UserRole;
-  isActive: boolean;
-  organization: {
-    isActive: boolean;
-  };
-};
-
-type CreateStaffUserInput = {
-  name: string;
-  email: string;
-  passwordHash: string;
-  role: UserRole;
-};
-
-type CreateRefreshTokenInput = {
-  organizationId: string;
-  userId: string;
-  tokenHash: string;
-  tokenFamilyId: string;
-  expiresAt: Date;
-};
-
-type RotateRefreshTokenInput = {
-  currentTokenHash: string;
-  replacementTokenHash: string;
-  now: Date;
-};
-
-export type RotateRefreshTokenResult =
-  | {
-      status: "rotated";
-      user: AuthUserRecord;
-      expiresAt: Date;
-    }
-  | {
-      status: "invalid";
-    };
 
 const REVOCATION_REASON = {
   expired: "EXPIRED",

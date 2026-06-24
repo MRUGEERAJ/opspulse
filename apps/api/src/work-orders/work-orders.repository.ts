@@ -2,37 +2,13 @@ import { Injectable } from "@nestjs/common";
 
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import type { WorkOrder } from "../generated/prisma/client.js";
-import type {
-  WorkOrderPriority,
-  WorkOrderStatus
-} from "../generated/prisma/enums.js";
 import { StatusChangeSource } from "../generated/prisma/enums.js";
 import { PrismaService } from "../prisma/prisma.service.js";
-
-export type WorkOrderWriteData = {
-  title?: string;
-  description?: string | null;
-  priority?: WorkOrderPriority;
-  dueAt?: Date | null;
-  siteAddress?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  requiresProofPhoto?: boolean;
-  requiresLocation?: boolean;
-  requiresQrScan?: boolean;
-};
-
-export type CreateWorkOrderWriteData = WorkOrderWriteData & {
-  title: string;
-};
-
-type ListWorkOrdersInput = {
-  organizationId: string;
-  page: number;
-  limit: number;
-  status?: WorkOrderStatus;
-  priority?: WorkOrderPriority;
-};
+import type {
+  CreateWorkOrderWriteData,
+  ListWorkOrdersInput,
+  WorkOrderWriteData
+} from "./work-orders.types.js";
 
 @Injectable()
 export class WorkOrdersRepository {

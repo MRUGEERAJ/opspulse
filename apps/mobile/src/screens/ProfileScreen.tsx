@@ -1,4 +1,3 @@
-import type { HealthResponse } from "@opspulse/shared";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -8,11 +7,7 @@ import { PrimaryButton } from "../shared/components/PrimaryButton";
 import { Screen } from "../shared/components/Screen";
 import { mobileEnvironment } from "../shared/config/environment";
 import { colors } from "../shared/theme";
-
-type HealthState =
-  | { status: "loading" }
-  | { status: "success"; data: HealthResponse }
-  | { status: "error"; message: string };
+import type { HealthState } from "./profile.types";
 
 export function ProfileScreen() {
   const { logout } = useDemoAuth();

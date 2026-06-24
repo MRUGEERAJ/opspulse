@@ -9,12 +9,10 @@ import { JwtService } from "@nestjs/jwt";
 import { isUUID } from "class-validator";
 
 import { AuthRepository } from "../auth.repository.js";
-import type { RequestWithAuthenticatedActor } from "../auth.types.js";
-
-type AccessTokenPayload = {
-  sub?: unknown;
-  type?: unknown;
-};
+import type {
+  AccessTokenPayload,
+  RequestWithAuthenticatedActor
+} from "../auth.types.js";
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -25,9 +23,9 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-   const request = context
+    const request = context
       .switchToHttp()
-      .getRequest<RequestWithAuthenticatedActor>(); // TODO 
+      .getRequest<RequestWithAuthenticatedActor>();
     const token = readBearerToken(request);
     let payload: AccessTokenPayload;
 
