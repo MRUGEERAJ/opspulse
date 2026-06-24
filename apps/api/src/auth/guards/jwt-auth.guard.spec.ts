@@ -21,7 +21,7 @@ const userId = "20000000-0000-4000-8000-000000000001";
 test("JwtAuthGuard verifies a token and reloads the active actor", async () => {
   const jwtService = new JwtService();
   const token = await jwtService.signAsync(
-    { sub: userId },
+    { sub: userId, type: "access" },
     { secret, issuer, audience, expiresIn: 60 }
   );
   const request = createRequest(`Bearer ${token}`);
@@ -39,7 +39,7 @@ test("JwtAuthGuard verifies a token and reloads the active actor", async () => {
 test("JwtAuthGuard rejects expired tokens and inactive users", async () => {
   const jwtService = new JwtService();
   const expiredToken = await jwtService.signAsync(
-    { sub: userId },
+    { sub: userId, type: "access" },
     { secret, issuer, audience, expiresIn: -1 }
   );
 
@@ -47,7 +47,7 @@ test("JwtAuthGuard rejects expired tokens and inactive users", async () => {
     [`Bearer ${expiredToken}`, true],
     [
       `Bearer ${await jwtService.signAsync(
-        { sub: userId },
+        { sub: userId, type: "access" },
         { secret, issuer, audience, expiresIn: 60 }
       )}`,
       false
@@ -64,6 +64,24 @@ test("JwtAuthGuard rejects expired tokens and inactive users", async () => {
       (error: unknown) => error instanceof UnauthorizedException
     );
   }
+});
+
+test("JwtAuthGuard rejects a valid JWT that is not an access token", async () => {
+  const jwtService = new JwtService();
+  const token = await jwtService.signAsync(
+    { sub: userId, type: "refresh" },
+    { secret, issuer, audience, expiresIn: 60 }
+  );
+  const guard = new JwtAuthGuard(
+    jwtService,
+    createConfigService(),
+    createRepository(true)
+  );
+
+  await assert.rejects(
+    guard.canActivate(createContext(createRequest(`Bearer ${token}`))),
+    (error: unknown) => error instanceof UnauthorizedException
+  );
 });
 
 function createRepository(active: boolean): AuthRepository {

@@ -21,3 +21,12 @@ export type SafeUser = {
   role: UserRole;
   isActive: boolean;
 };
+
+export type AuthSessionResponse = {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: "Bearer";
+  accessTokenExpiresIn: number;
+  refreshTokenExpiresIn: number;
+  user: SafeUser;
+};

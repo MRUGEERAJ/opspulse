@@ -13,6 +13,7 @@ import type { RequestWithAuthenticatedActor } from "../auth.types.js";
 
 type AccessTokenPayload = {
   sub?: unknown;
+  type?: unknown;
 };
 
 @Injectable()
@@ -24,9 +25,9 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context
+   const request = context
       .switchToHttp()
-      .getRequest<RequestWithAuthenticatedActor>();
+      .getRequest<RequestWithAuthenticatedActor>(); // TODO 
     const token = readBearerToken(request);
     let payload: AccessTokenPayload;
 
@@ -43,7 +44,11 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Invalid or expired access token");
     }
 
-    if (typeof payload.sub !== "string" || !isUUID(payload.sub, "4")) {
+    if (
+      typeof payload.sub !== "string" ||
+      !isUUID(payload.sub, "4") ||
+      payload.type !== "access"
+    ) {
       throw new UnauthorizedException("Invalid or expired access token");
     }
 

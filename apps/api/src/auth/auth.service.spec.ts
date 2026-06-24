@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { UnauthorizedException } from "@nestjs/common";
@@ -26,16 +27,25 @@ const activeUser: AuthUserRecord = {
   }
 };
 
-test("AuthService login returns a one-hour bearer token and safe user", async () => {
+test("AuthService login returns access and refresh tokens without storing plaintext", async () => {
+  let storedTokenHash = "";
   const authRepository = {
-    findByEmail: async () => activeUser
+    findByEmail: async () => activeUser,
+    createRefreshToken: async (
+      input: Parameters<AuthRepository["createRefreshToken"]>[0]
+    ) => {
+      storedTokenHash = input.tokenHash;
+      assert.equal(input.userId, activeUser.id);
+      assert.equal(input.organizationId, activeUser.organizationId);
+      assert.match(input.tokenFamilyId, /^[0-9a-f-]{36}$/);
+    }
   } as unknown as AuthRepository;
   const passwordService = {
     verify: async () => true
   } as unknown as PasswordService;
   const jwtService = {
     signAsync: async (payload: unknown) => {
-      assert.deepEqual(payload, { sub: activeUser.id });
+      assert.deepEqual(payload, { sub: activeUser.id, type: "access" });
       return "signed-token";
     }
   } as unknown as JwtService;
@@ -53,8 +63,15 @@ test("AuthService login returns a one-hour bearer token and safe user", async ()
   });
 
   assert.equal(result.accessToken, "signed-token");
-  assert.equal(result.expiresIn, 3600);
+  assert.equal(result.accessTokenExpiresIn, 900);
+  assert.equal(result.refreshTokenExpiresIn, 2_592_000);
   assert.equal(result.tokenType, "Bearer");
+  assert.equal(result.refreshToken.length, 64);
+  assert.equal(
+    storedTokenHash,
+    createHash("sha256").update(result.refreshToken).digest("hex")
+  );
+  assert.notEqual(storedTokenHash, result.refreshToken);
   assert.equal(result.user.email, activeUser.email);
   assert.equal("passwordHash" in result.user, false);
 });
@@ -88,6 +105,93 @@ test("AuthService login uses the same generic error for invalid authentication",
         error.message === "Invalid email or password"
     );
   }
+});
+
+test("AuthService refresh rotates the supplied token and preserves remaining expiry", async () => {
+  const expiresAt = new Date(Date.now() + 60_000);
+  let currentTokenHash = "";
+  let replacementTokenHash = "";
+  const authRepository = {
+    rotateRefreshToken: async (
+      input: Parameters<AuthRepository["rotateRefreshToken"]>[0]
+    ) => {
+      currentTokenHash = input.currentTokenHash;
+      replacementTokenHash = input.replacementTokenHash;
+
+      return {
+        status: "rotated" as const,
+        user: activeUser,
+        expiresAt
+      };
+    }
+  } as unknown as AuthRepository;
+  const service = new AuthService(
+    authRepository,
+    {} as PasswordService,
+    {
+      signAsync: async () => "refreshed-access-token"
+    } as unknown as JwtService,
+    createConfigService()
+  );
+
+  const suppliedToken = "a".repeat(64);
+  const result = await service.refresh({
+    refreshToken: suppliedToken
+  });
+
+  assert.equal(
+    currentTokenHash,
+    createHash("sha256").update(suppliedToken).digest("hex")
+  );
+  assert.equal(
+    replacementTokenHash,
+    createHash("sha256").update(result.refreshToken).digest("hex")
+  );
+  assert.equal(result.accessToken, "refreshed-access-token");
+  assert.ok(result.refreshTokenExpiresIn > 0);
+  assert.ok(result.refreshTokenExpiresIn <= 60);
+});
+
+test("AuthService refresh returns a generic error for every invalid token state", async () => {
+  const service = new AuthService(
+    {
+      rotateRefreshToken: async () => ({ status: "invalid" })
+    } as unknown as AuthRepository,
+    {} as PasswordService,
+    {} as JwtService,
+    createConfigService()
+  );
+
+  await assert.rejects(
+    service.refresh({
+      refreshToken: "unknown-token".repeat(4)
+    }),
+    (error: unknown) =>
+      error instanceof UnauthorizedException &&
+      error.message === "Invalid or expired refresh token"
+  );
+});
+
+test("AuthService logout hashes the token before revoking its family", async () => {
+  let revokedTokenHash = "";
+  const service = new AuthService(
+    {
+      revokeRefreshTokenFamily: async (tokenHash: string) => {
+        revokedTokenHash = tokenHash;
+      }
+    } as unknown as AuthRepository,
+    {} as PasswordService,
+    {} as JwtService,
+    createConfigService()
+  );
+  const refreshToken = "logout-token".repeat(6);
+
+  await service.logout({ refreshToken });
+
+  assert.equal(
+    revokedTokenHash,
+    createHash("sha256").update(refreshToken).digest("hex")
+  );
 });
 
 test("AuthService hashes a new staff password and returns no sensitive fields", async () => {
@@ -143,7 +247,8 @@ test("AuthService hashes a new staff password and returns no sensitive fields", 
 
 function createConfigService(): ConfigService {
   const values: Record<string, string | number> = {
-    JWT_ACCESS_TOKEN_TTL_SECONDS: 3600,
+    JWT_ACCESS_TOKEN_TTL_SECONDS: 900,
+    JWT_REFRESH_TOKEN_TTL_SECONDS: 2_592_000,
     JWT_SECRET: "test-secret-with-at-least-32-characters",
     JWT_ISSUER: "opspulse-api",
     JWT_AUDIENCE: "opspulse-clients"

@@ -17,6 +17,7 @@ export type ApiEnvironment = Record<string, unknown> & {
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
   JWT_ACCESS_TOKEN_TTL_SECONDS: number;
+  JWT_REFRESH_TOKEN_TTL_SECONDS: number;
   PASSWORD_HASH_ROUNDS: number;
   DEMO_USER_PASSWORD?: string;
 };
@@ -36,10 +37,16 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
   const jwtIssuer = readString(config, "JWT_ISSUER", "opspulse-api");
   const jwtAudience = readString(config, "JWT_AUDIENCE", "opspulse-clients");
   const jwtAccessTokenTtlSeconds = readInteger(
-    readString(config, "JWT_ACCESS_TOKEN_TTL_SECONDS", "3600"),
+    readString(config, "JWT_ACCESS_TOKEN_TTL_SECONDS", "900"),
     "JWT_ACCESS_TOKEN_TTL_SECONDS",
     60,
     86_400
+  );
+  const jwtRefreshTokenTtlSeconds = readInteger(
+    readString(config, "JWT_REFRESH_TOKEN_TTL_SECONDS", "2592000"),
+    "JWT_REFRESH_TOKEN_TTL_SECONDS",
+    3_600,
+    31_536_000
   );
   const passwordHashRounds = readInteger(
     readString(config, "PASSWORD_HASH_ROUNDS", "12"),
@@ -87,6 +94,7 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
     JWT_ISSUER: jwtIssuer,
     JWT_AUDIENCE: jwtAudience,
     JWT_ACCESS_TOKEN_TTL_SECONDS: jwtAccessTokenTtlSeconds,
+    JWT_REFRESH_TOKEN_TTL_SECONDS: jwtRefreshTokenTtlSeconds,
     PASSWORD_HASH_ROUNDS: passwordHashRounds,
     ...(demoUserPassword ? { DEMO_USER_PASSWORD: demoUserPassword } : {})
   };

@@ -5,14 +5,24 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { Prisma } from "../generated/prisma/client.js";
 import { actorToSafeUser, toSafeUser } from "./auth.mapper.js";
-import { AuthRepository } from "./auth.repository.js";
-import type { AuthenticatedActor } from "./auth.types.js";
+import {
+  AuthRepository,
+  type AuthUserRecord
+} from "./auth.repository.js";
+import type {
+  AuthenticatedActor,
+  AuthSessionResponse
+} from "./auth.types.js";
 import type { LoginDto } from "./dto/login.dto.js";
+import type { RefreshTokenDto } from "./dto/refresh-token.dto.js";
 import type { RegisterDto } from "./dto/register.dto.js";
 import { PasswordService } from "./password.service.js";
+
+const REFRESH_TOKEN_BYTES = 48;
 
 @Injectable()
 export class AuthService {
@@ -23,7 +33,7 @@ export class AuthService {
     private readonly configService: ConfigService
   ) {}
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto): Promise<AuthSessionResponse> {
     const user = await this.authRepository.findByEmail(dto.email);
 
     if (
@@ -35,25 +45,57 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email or password");
     }
 
-    const expiresIn = this.configService.getOrThrow<number>(
-      "JWT_ACCESS_TOKEN_TTL_SECONDS"
+    const refreshToken = generateRefreshToken();
+    const refreshTokenExpiresIn = this.configService.getOrThrow<number>(
+      "JWT_REFRESH_TOKEN_TTL_SECONDS"
     );
-    const accessToken = await this.jwtService.signAsync(
-      { sub: user.id },
-      {
-        secret: this.configService.getOrThrow<string>("JWT_SECRET"),
-        issuer: this.configService.getOrThrow<string>("JWT_ISSUER"),
-        audience: this.configService.getOrThrow<string>("JWT_AUDIENCE"),
-        expiresIn
-      }
+    const expiresAt = new Date(Date.now() + refreshTokenExpiresIn * 1_000);
+
+    await this.authRepository.createRefreshToken({
+      organizationId: user.organizationId,
+      userId: user.id,
+      tokenHash: hashRefreshToken(refreshToken),
+      tokenFamilyId: randomUUID(),
+      expiresAt
+    });
+
+    return this.createSessionResponse(
+      user,
+      refreshToken,
+      refreshTokenExpiresIn
+    );
+  }
+
+  async refresh(dto: RefreshTokenDto): Promise<AuthSessionResponse> {
+    const replacementToken = generateRefreshToken();
+    const now = new Date();
+    const result = await this.authRepository.rotateRefreshToken({
+      currentTokenHash: hashRefreshToken(dto.refreshToken),
+      replacementTokenHash: hashRefreshToken(replacementToken),
+      now
+    });
+
+    if (result.status !== "rotated") {
+      throw new UnauthorizedException("Invalid or expired refresh token");
+    }
+
+    const refreshTokenExpiresIn = Math.max(
+      0,
+      Math.ceil((result.expiresAt.getTime() - now.getTime()) / 1_000)
     );
 
-    return {
-      accessToken,
-      tokenType: "Bearer" as const,
-      expiresIn,
-      user: toSafeUser(user)
-    };
+    return this.createSessionResponse(
+      result.user,
+      replacementToken,
+      refreshTokenExpiresIn
+    );
+  }
+
+  async logout(dto: RefreshTokenDto): Promise<void> {
+    await this.authRepository.revokeRefreshTokenFamily(
+      hashRefreshToken(dto.refreshToken),
+      new Date()
+    );
   }
 
   async register(actor: AuthenticatedActor, dto: RegisterDto) {
@@ -83,4 +125,43 @@ export class AuthService {
   me(actor: AuthenticatedActor) {
     return actorToSafeUser(actor);
   }
+
+  private async createSessionResponse(
+    user: AuthUserRecord,
+    refreshToken: string,
+    refreshTokenExpiresIn: number
+  ): Promise<AuthSessionResponse> {
+    const accessTokenExpiresIn = this.configService.getOrThrow<number>(
+      "JWT_ACCESS_TOKEN_TTL_SECONDS"
+    );
+    const accessToken = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+        type: "access"
+      },
+      {
+        secret: this.configService.getOrThrow<string>("JWT_SECRET"),
+        issuer: this.configService.getOrThrow<string>("JWT_ISSUER"),
+        audience: this.configService.getOrThrow<string>("JWT_AUDIENCE"),
+        expiresIn: accessTokenExpiresIn
+      }
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      tokenType: "Bearer",
+      accessTokenExpiresIn,
+      refreshTokenExpiresIn,
+      user: toSafeUser(user)
+    };
+  }
+}
+
+function generateRefreshToken(): string {
+  return randomBytes(REFRESH_TOKEN_BYTES).toString("base64url");
+}
+
+function hashRefreshToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
 }
