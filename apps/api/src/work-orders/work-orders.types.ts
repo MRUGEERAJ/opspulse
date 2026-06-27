@@ -1,4 +1,5 @@
 import type {
+  UserRole,
   WorkOrderPriority,
   WorkOrderStatus
 } from "../generated/prisma/enums.js";
@@ -26,6 +27,17 @@ export type ListWorkOrdersInput = {
   limit: number;
   status?: WorkOrderStatus;
   priority?: WorkOrderPriority;
+};
+
+export type ListAssignedWorkOrdersInput = ListWorkOrdersInput & {
+  assigneeId: string;
+};
+
+export type WorkOrderAssignee = {
+  id: string;
+  organizationId: string;
+  role: UserRole;
+  isActive: boolean;
 };
 
 export type WorkOrderResponse = {
