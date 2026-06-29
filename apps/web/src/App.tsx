@@ -1,10 +1,10 @@
 import { AppRouter } from "./app/AppRouter";
-import { DemoAuthProvider } from "./app/DemoAuthContext";
+import { AuthProvider } from "./features/auth/AuthContext";
 
 export function App() {
   return (
-    <DemoAuthProvider>
+    <AuthProvider>
       <AppRouter />
-    </DemoAuthProvider>
+    </AuthProvider>
   );
 }

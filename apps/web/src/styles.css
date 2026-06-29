@@ -102,12 +102,51 @@ code {
 .login-card h1 {
   margin: 0;
   font-size: clamp(2rem, 6vw, 3rem);
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .login-description {
   color: #52645f;
   line-height: 1.65;
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+  margin: 28px 0;
+}
+
+.form-field {
+  display: grid;
+  gap: 7px;
+  color: #263b36;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.form-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd8d4;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  color: #17212b;
+}
+
+.form-field input:focus {
+  border-color: #0f7660;
+  outline: 3px solid #d9f2eb;
+}
+
+.form-error {
+  border: 1px solid #f0b7b7;
+  border-radius: 8px;
+  background: #fdeaea;
+  padding: 12px;
+  color: #912626;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .demo-notice {
@@ -174,6 +213,12 @@ code {
   padding-top: 20px;
 }
 
+.sidebar-email {
+  color: #cce0da;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
 .role-badge,
 .environment-badge {
   width: fit-content;
@@ -225,7 +270,7 @@ code {
 .page-heading h2 {
   margin: 0;
   font-size: clamp(2rem, 4vw, 2.75rem);
-  letter-spacing: -0.035em;
+  letter-spacing: 0;
 }
 
 .page-heading p:last-child {

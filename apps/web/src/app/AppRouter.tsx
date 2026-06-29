@@ -6,6 +6,7 @@ import {
 
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
+import { UnauthorizedPage } from "../features/auth/UnauthorizedPage";
 import { WorkOrderDetailPage } from "../features/work-orders/WorkOrderDetailPage";
 import { WorkOrdersPage } from "../features/work-orders/WorkOrdersPage";
 import { AppLayout } from "./AppLayout";
@@ -17,7 +18,11 @@ const router = createBrowserRouter([
     element: <LoginPage />
   },
   {
-    element: <ProtectedRoute />,
+    path: "/unauthorized",
+    element: <UnauthorizedPage />
+  },
+  {
+    element: <ProtectedRoute allowedRoles={["ADMIN", "MANAGER"]} />,
     children: [
       {
         element: <AppLayout />,

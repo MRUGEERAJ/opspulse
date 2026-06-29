@@ -1,6 +1,6 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import { useDemoAuth } from "./DemoAuthContext";
+import { useAuth } from "../features/auth/AuthContext";
 
 const navigationItems = [
   { to: "/dashboard", label: "Dashboard" },
@@ -8,7 +8,13 @@ const navigationItems = [
 ] as const;
 
 export function AppLayout() {
-  const { session, logout } = useDemoAuth();
+  const { session, logout } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="control-tower">
@@ -33,9 +39,14 @@ export function AppLayout() {
         </nav>
 
         <div className="sidebar-user">
-          <span className="role-badge">{session?.role}</span>
-          <strong>{session?.displayName}</strong>
-          <button className="button button-secondary" type="button" onClick={logout}>
+          <span className="role-badge">{session?.user.role}</span>
+          <strong>{session?.user.name}</strong>
+          <span className="sidebar-email">{session?.user.email}</span>
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={handleLogout}
+          >
             Log out
           </button>
         </div>
