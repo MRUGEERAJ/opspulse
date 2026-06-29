@@ -10,6 +10,7 @@ export type ApiEnvironment = Record<string, unknown> & {
   CORS_ORIGINS: string[];
   SERVICE_NAME: string;
   LOG_LEVEL: LogLevel;
+  REQUEST_BODY_LIMIT: string;
   DATABASE_URL: string;
   JWT_SECRET: string;
   JWT_ISSUER: string;

@@ -11,7 +11,7 @@ export const CurrentActor = createParamDecorator(
       .switchToHttp()
       .getRequest<RequestWithAuthenticatedActor>();
 
-    if (!request.actor) {
+    if (!request.actor) { // TODO: need to understand why this check is needed
       throw new Error("Authenticated actor was not attached to the request");
     }
 

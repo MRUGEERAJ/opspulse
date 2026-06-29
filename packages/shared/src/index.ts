@@ -27,10 +27,28 @@ export type HealthResponse = {
   timestamp: string;
 };
 
+export type ApiValidationError = {
+  field: string;
+  messages: string[];
+};
+
 export type ApiErrorResponse = {
+  success: false;
   statusCode: number;
   timestamp: string;
   path: string;
   method: string;
-  message: string | string[];
+  message: string;
+  error: string;
+  errors?: ApiValidationError[];
+};
+
+export type ApiSuccessResponse<TData = unknown, TMeta = unknown> = {
+  success: true;
+  statusCode: number;
+  timestamp: string;
+  path: string;
+  method: string;
+  data: TData;
+  meta?: TMeta;
 };

@@ -25,6 +25,9 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
   );
   const serviceName = readString(config, "SERVICE_NAME", "OpsPulse API");
   const logLevel = readString(config, "LOG_LEVEL", "log").toLowerCase();
+  const requestBodyLimit = readBodyLimit(
+    readString(config, "REQUEST_BODY_LIMIT", "1mb")
+  );
   const databaseUrl = readRequiredString(config, "DATABASE_URL");
   const jwtSecret = readRequiredString(config, "JWT_SECRET");
   const jwtIssuer = readString(config, "JWT_ISSUER", "opspulse-api");
@@ -82,6 +85,7 @@ export function validateEnv(config: Record<string, unknown>): ApiEnvironment {
     CORS_ORIGINS: corsOrigins,
     SERVICE_NAME: serviceName,
     LOG_LEVEL: logLevel,
+    REQUEST_BODY_LIMIT: requestBodyLimit,
     DATABASE_URL: databaseUrl,
     JWT_SECRET: jwtSecret,
     JWT_ISSUER: jwtIssuer,
@@ -217,6 +221,18 @@ function readInteger(
   }
 
   return parsed;
+}
+
+function readBodyLimit(value: string): string {
+  const normalized = value.trim().toLowerCase();
+
+  if (!/^[1-9]\d*(b|kb|mb)$/.test(normalized)) {
+    throw new Error(
+      "REQUEST_BODY_LIMIT must be a size like 100kb, 1mb, or 1048576b"
+    );
+  }
+
+  return normalized;
 }
 
 function normalizeApiPrefix(value: string): string {
