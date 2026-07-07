@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { useDemoAuth } from "../auth/DemoAuthContext";
+import { useAuth } from "../auth/AuthContext";
 import { getApiHealth } from "../shared/api/health";
 import { PrimaryButton } from "../shared/components/PrimaryButton";
 import { Screen } from "../shared/components/Screen";
@@ -10,7 +10,7 @@ import { colors } from "../shared/theme";
 import type { HealthState } from "./profile.types";
 
 export function ProfileScreen() {
-  const { logout } = useDemoAuth();
+  const { logout, session } = useAuth();
   const [healthState, setHealthState] = useState<HealthState>({
     status: "loading"
   });
@@ -36,11 +36,25 @@ export function ProfileScreen() {
 
   return (
     <Screen>
-      <Text style={styles.eyebrow}>Development account</Text>
-      <Text style={styles.title}>Demo Field Agent</Text>
+      <Text style={styles.eyebrow}>Field account</Text>
+      <Text style={styles.title}>{session?.user.name ?? "Field Agent"}</Text>
       <Text style={styles.description}>
-        No real authentication yet. This session exists only in memory.
+        Authenticated mobile session for assigned field operations.
       </Text>
+
+      <View style={styles.card}>
+        <Text style={styles.cardLabel}>Signed in user</Text>
+        <View style={styles.profileRows}>
+          <View>
+            <Text style={styles.rowLabel}>Email</Text>
+            <Text style={styles.rowValue}>{session?.user.email}</Text>
+          </View>
+          <View>
+            <Text style={styles.rowLabel}>Role</Text>
+            <Text style={styles.roleBadge}>{session?.user.role}</Text>
+          </View>
+        </View>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Backend connectivity</Text>
@@ -81,7 +95,11 @@ export function ProfileScreen() {
       </View>
 
       <View style={styles.logout}>
-        <PrimaryButton label="Log out" variant="secondary" onPress={logout} />
+        <PrimaryButton
+          label="Log out"
+          variant="secondary"
+          onPress={() => void logout()}
+        />
       </View>
     </Screen>
   );
@@ -118,6 +136,31 @@ const styles = StyleSheet.create({
   cardLabel: {
     color: colors.text,
     fontSize: 17,
+    fontWeight: "800"
+  },
+  profileRows: {
+    gap: 14
+  },
+  rowLabel: {
+    marginBottom: 4,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  rowValue: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  roleBadge: {
+    alignSelf: "flex-start",
+    overflow: "hidden",
+    borderRadius: 999,
+    backgroundColor: colors.successBackground,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    color: colors.successText,
     fontWeight: "800"
   },
   endpoint: {
