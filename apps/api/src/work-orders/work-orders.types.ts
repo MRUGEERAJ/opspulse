@@ -1,4 +1,5 @@
 import type {
+  StatusChangeSource,
   UserRole,
   WorkOrderPriority,
   WorkOrderStatus
@@ -38,6 +39,14 @@ export type WorkOrderAssignee = {
   organizationId: string;
   role: UserRole;
   isActive: boolean;
+};
+
+export type UpdateWorkOrderStatusWriteData = {
+  toStatus: WorkOrderStatus;
+  actorUserId: string | null;
+  source: StatusChangeSource;
+  reason?: string;
+  auditAction: string;
 };
 
 export type WorkOrderResponse = {

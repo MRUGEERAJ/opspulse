@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException
 } from "@nestjs/common";
@@ -10,10 +11,12 @@ import {
 import type { AuthenticatedActor } from "../auth/auth.types.js";
 import type { WorkOrder } from "../generated/prisma/client.js";
 import {
+  StatusChangeSource,
   UserRole,
   WorkOrderPriority,
   WorkOrderStatus
 } from "../generated/prisma/enums.js";
+import type { UpdateWorkOrderStatusWriteData } from "./work-orders.types.js";
 import type { WorkOrdersRepository } from "./work-orders.repository.js";
 import { WorkOrdersService } from "./work-orders.service.js";
 
@@ -110,6 +113,171 @@ test("non-FieldAgent cannot use assigned-to-me service methods", async () => {
   );
 });
 
+test("assigned FieldAgent can start their assigned work order", async () => {
+  let statusUpdate: UpdateWorkOrderStatusWriteData | undefined;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.ASSIGNED),
+    findAssignedToAssigneeById: async () =>
+      createWorkOrder(WorkOrderStatus.ASSIGNED),
+    updateStatus: async (_workOrder, data) => {
+      statusUpdate = data;
+      return createWorkOrder(WorkOrderStatus.IN_PROGRESS);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.updateStatus(fieldAgentActor(), workOrderId, {
+    status: WorkOrderStatus.IN_PROGRESS
+  });
+
+  assert.equal(result.status, WorkOrderStatus.IN_PROGRESS);
+  assert.equal(statusUpdate?.toStatus, WorkOrderStatus.IN_PROGRESS);
+  assert.equal(statusUpdate?.actorUserId, agentId);
+  assert.equal(statusUpdate?.source, StatusChangeSource.API);
+});
+
+test("assigned FieldAgent can complete an in-progress work order", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS),
+    findAssignedToAssigneeById: async () =>
+      createWorkOrder(WorkOrderStatus.IN_PROGRESS),
+    updateStatus: async () => createWorkOrder(WorkOrderStatus.COMPLETED)
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.updateStatus(fieldAgentActor(), workOrderId, {
+    status: WorkOrderStatus.COMPLETED
+  });
+
+  assert.equal(result.status, WorkOrderStatus.COMPLETED);
+});
+
+test("FieldAgent must provide a reason when marking work order failed", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS)
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(fieldAgentActor(), workOrderId, {
+      status: WorkOrderStatus.FAILED
+    }),
+    (error: unknown) => error instanceof BadRequestException
+  );
+});
+
+test("Admin must provide a reason when cancelling a work order", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.CREATED)
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(adminActor(), workOrderId, {
+      status: WorkOrderStatus.CANCELLED
+    }),
+    (error: unknown) => error instanceof BadRequestException
+  );
+});
+
+test("public status endpoint rejects setting SLA_BREACHED", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS)
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(adminActor(), workOrderId, {
+      status: WorkOrderStatus.SLA_BREACHED
+    }),
+    (error: unknown) => error instanceof BadRequestException
+  );
+});
+
+test("system method can mark active work order as SLA_BREACHED", async () => {
+  let statusUpdate: UpdateWorkOrderStatusWriteData | undefined;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.ASSIGNED),
+    updateStatus: async (_workOrder, data) => {
+      statusUpdate = data;
+      return createWorkOrder(WorkOrderStatus.SLA_BREACHED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.markSlaBreached(
+    organizationId,
+    workOrderId,
+    "Due time passed"
+  );
+
+  assert.equal(result.status, WorkOrderStatus.SLA_BREACHED);
+  assert.equal(statusUpdate?.toStatus, WorkOrderStatus.SLA_BREACHED);
+  assert.equal(statusUpdate?.actorUserId, null);
+  assert.equal(statusUpdate?.source, StatusChangeSource.SYSTEM);
+});
+
+test("terminal statuses reject further lifecycle updates", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.COMPLETED)
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(fieldAgentActor(), workOrderId, {
+      status: WorkOrderStatus.FAILED,
+      reason: "Could not verify result"
+    }),
+    (error: unknown) => error instanceof ConflictException
+  );
+});
+
+test("invalid lifecycle jump returns conflict", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.ASSIGNED)
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(fieldAgentActor(), workOrderId, {
+      status: WorkOrderStatus.COMPLETED
+    }),
+    (error: unknown) => error instanceof ConflictException
+  );
+});
+
+test("FieldAgent cannot update another agent's work order status", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.ASSIGNED),
+    findAssignedToAssigneeById: async () => null
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(fieldAgentActor(), workOrderId, {
+      status: WorkOrderStatus.IN_PROGRESS
+    }),
+    (error: unknown) => error instanceof ForbiddenException
+  );
+});
+
+test("status update returns conflict when optimistic lock update fails", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.ASSIGNED),
+    findAssignedToAssigneeById: async () =>
+      createWorkOrder(WorkOrderStatus.ASSIGNED),
+    updateStatus: async () => null
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.updateStatus(fieldAgentActor(), workOrderId, {
+      status: WorkOrderStatus.IN_PROGRESS
+    }),
+    (error: unknown) => error instanceof ConflictException
+  );
+});
+
 function createRepository(
   overrides: Partial<WorkOrdersRepository>
 ): WorkOrdersRepository {
@@ -117,10 +285,15 @@ function createRepository(
     findById: async () => null,
     findAssigneeById: async () => null,
     assign: async () => null,
+    updateStatus: async () => null,
     listAssignedToAssignee: async () => ({ data: [], total: 0 }),
     findAssignedToAssigneeById: async () => null,
     ...overrides
   } as WorkOrdersRepository;
+}
+
+function adminActor(): AuthenticatedActor {
+  return createActor("20000000-0000-4000-8000-000000000001", UserRole.ADMIN);
 }
 
 function managerActor(): AuthenticatedActor {

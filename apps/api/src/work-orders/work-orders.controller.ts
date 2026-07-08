@@ -20,6 +20,7 @@ import { AssignWorkOrderDto } from "./dto/assign-work-order.dto.js";
 import { CancelWorkOrderDto } from "./dto/cancel-work-order.dto.js";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto.js";
 import { ListWorkOrdersQueryDto } from "./dto/list-work-orders-query.dto.js";
+import { UpdateWorkOrderStatusDto } from "./dto/update-work-order-status.dto.js";
 import { UpdateWorkOrderDto } from "./dto/update-work-order.dto.js";
 import { WorkOrdersService } from "./work-orders.service.js";
 
@@ -81,6 +82,16 @@ export class WorkOrdersController {
     @Body() dto: AssignWorkOrderDto
   ) {
     return this.workOrdersService.assign(actor, id, dto);
+  }
+
+  @Patch(":id/status")
+  @Roles(UserRole.ADMIN, UserRole.FIELD_AGENT)
+  updateStatus(
+    @CurrentActor() actor: AuthenticatedActor,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @Body() dto: UpdateWorkOrderStatusDto
+  ) {
+    return this.workOrdersService.updateStatus(actor, id, dto);
   }
 
   @Patch(":id")

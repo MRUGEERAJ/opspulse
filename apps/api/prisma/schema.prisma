@@ -27,6 +27,7 @@ enum WorkOrderStatus {
   COMPLETED
   FAILED
   CANCELLED
+  SLA_BREACHED
 }
 
 enum StatusChangeSource {

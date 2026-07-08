@@ -13,13 +13,21 @@ stateDiagram-v2
   [*] --> CREATED
   CREATED --> ASSIGNED: Manager/Admin assigns FieldAgent
   CREATED --> CANCELLED: Admin cancels
+  CREATED --> SLA_BREACHED: System marks overdue
 
   ASSIGNED --> IN_PROGRESS: Assigned FieldAgent starts job
   ASSIGNED --> CANCELLED: Admin cancels
+  ASSIGNED --> SLA_BREACHED: System marks overdue
 
   IN_PROGRESS --> COMPLETED: Assigned FieldAgent completes job
   IN_PROGRESS --> FAILED: Assigned FieldAgent reports failure
   IN_PROGRESS --> CANCELLED: Admin cancels
+  IN_PROGRESS --> SLA_BREACHED: System marks overdue
+
+  SLA_BREACHED --> IN_PROGRESS: Assigned FieldAgent starts overdue job
+  SLA_BREACHED --> COMPLETED: Assigned FieldAgent completes overdue job
+  SLA_BREACHED --> FAILED: Assigned FieldAgent fails overdue job
+  SLA_BREACHED --> CANCELLED: Admin cancels overdue job
 
   COMPLETED --> [*]
   FAILED --> [*]
@@ -34,9 +42,12 @@ stateDiagram-v2
 | `CREATED -> CANCELLED` | Admin | Admin can cancel unassigned work. |
 | `ASSIGNED -> IN_PROGRESS` | Assigned FieldAgent | Only the assigned FieldAgent can start the job. |
 | `ASSIGNED -> CANCELLED` | Admin | Admin can cancel assigned work. |
+| `CREATED/ASSIGNED/IN_PROGRESS -> SLA_BREACHED` | System | SLA worker can mark active work as overdue. |
 | `IN_PROGRESS -> COMPLETED` | Assigned FieldAgent | Completion may require proof photo, QR scan, or location depending on work order rules. |
 | `IN_PROGRESS -> FAILED` | Assigned FieldAgent | Failure reason is required. |
 | `IN_PROGRESS -> CANCELLED` | Admin | Admin can cancel when business requires it. |
+| `SLA_BREACHED -> IN_PROGRESS/COMPLETED/FAILED` | Assigned FieldAgent | Overdue work remains actionable in v1. |
+| `SLA_BREACHED -> CANCELLED` | Admin | Admin can cancel overdue work. |
 | Terminal status edit | Admin only | `COMPLETED`, `FAILED`, and `CANCELLED` are terminal. Normal users cannot edit them. |
 
 Terminal statuses:
@@ -51,6 +62,7 @@ Important behavior:
 - Every important transition creates an `AuditLog` row.
 - Offline status updates are still validated during sync against the latest server state.
 - Invalid offline actions are stored as failed sync actions instead of being silently ignored.
+- In v1, `SLA_BREACHED` is modeled as a non-terminal status because this milestone asks for it. In a larger production design, SLA breach would likely be a separate field or event so operational status can remain `ASSIGNED` or `IN_PROGRESS`.
 
 ## Role Permission Matrix
 

@@ -11,6 +11,7 @@ import type {
   CreateWorkOrderWriteData,
   ListAssignedWorkOrdersInput,
   ListWorkOrdersInput,
+  UpdateWorkOrderStatusWriteData,
   WorkOrderAssignee,
   WorkOrderWriteData
 } from "./work-orders.types.js";
@@ -267,21 +268,20 @@ export class WorkOrdersRepository {
     });
   }
 
-  async cancel(
-    actor: AuthenticatedActor,
+  async updateStatus(
     workOrder: WorkOrder,
-    reason: string
+    data: UpdateWorkOrderStatusWriteData
   ): Promise<WorkOrder | null> {
     return this.prismaService.$transaction(async (transaction) => {
       const result = await transaction.workOrder.updateMany({
         where: {
           id: workOrder.id,
-          organizationId: actor.organizationId,
+          organizationId: workOrder.organizationId,
           version: workOrder.version,
           status: workOrder.status
         },
         data: {
-          status: "CANCELLED",
+          status: data.toStatus,
           version: {
             increment: 1
           }
@@ -294,29 +294,29 @@ export class WorkOrdersRepository {
 
       await transaction.workOrderStatusHistory.create({
         data: {
-          organizationId: actor.organizationId,
+          organizationId: workOrder.organizationId,
           workOrderId: workOrder.id,
-          actorUserId: actor.userId,
+          actorUserId: data.actorUserId,
           fromStatus: workOrder.status,
-          toStatus: "CANCELLED",
-          source: StatusChangeSource.API,
-          reason
+          toStatus: data.toStatus,
+          source: data.source,
+          reason: data.reason
         }
       });
 
       await transaction.auditLog.create({
         data: {
-          organizationId: actor.organizationId,
-          actorUserId: actor.userId,
+          organizationId: workOrder.organizationId,
+          actorUserId: data.actorUserId,
           workOrderId: workOrder.id,
-          action: "WORK_ORDER_CANCELLED",
+          action: data.auditAction,
           targetType: "WORK_ORDER",
           targetId: workOrder.id,
           metadata: {
             fromStatus: workOrder.status,
-            toStatus: "CANCELLED",
-            source: StatusChangeSource.API,
-            reason
+            toStatus: data.toStatus,
+            source: data.source,
+            ...(data.reason ? { reason: data.reason } : {})
           }
         }
       });
@@ -328,4 +328,5 @@ export class WorkOrdersRepository {
       });
     });
   }
+
 }

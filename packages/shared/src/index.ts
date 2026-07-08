@@ -12,7 +12,8 @@ export const WORK_ORDER_STATUSES = [
   "IN_PROGRESS",
   "COMPLETED",
   "FAILED",
-  "CANCELLED"
+  "CANCELLED",
+  "SLA_BREACHED"
 ] as const;
 export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
 
