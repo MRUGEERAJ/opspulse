@@ -102,6 +102,166 @@ test("AuthRepository treats reuse of a rotated token as invalid and revokes its 
   });
 });
 
+test("AuthRepository revokes a token family when the refresh token is expired", async () => {
+  let revocationArgs: Record<string, unknown> | undefined;
+  const transaction = {
+    refreshToken: {
+      findUnique: async () => ({
+        ...activeToken,
+        expiresAt: new Date("2026-06-22T23:59:59.000Z")
+      }),
+      updateMany: async (args: Record<string, unknown>) => {
+        revocationArgs = args;
+        return { count: 1 };
+      }
+    }
+  };
+  const repository = createRepository(transaction);
+
+  const result = await repository.rotateRefreshToken({
+    currentTokenHash: "expired-hash",
+    replacementTokenHash: "unused-hash",
+    now: new Date("2026-06-23T00:00:00.000Z")
+  });
+
+  assert.deepEqual(result, { status: "invalid" });
+  assert.deepEqual(revocationArgs?.where, {
+    tokenFamilyId: activeToken.tokenFamilyId,
+    revokedAt: null
+  });
+  assert.deepEqual(revocationArgs?.data, {
+    revokedAt: new Date("2026-06-23T00:00:00.000Z"),
+    revocationReason: "EXPIRED"
+  });
+});
+
+test("AuthRepository revokes a token family when the user is inactive", async () => {
+  let revocationArgs: Record<string, unknown> | undefined;
+  const transaction = {
+    refreshToken: {
+      findUnique: async () => ({
+        ...activeToken,
+        user: {
+          ...activeUser,
+          isActive: false
+        }
+      }),
+      updateMany: async (args: Record<string, unknown>) => {
+        revocationArgs = args;
+        return { count: 1 };
+      }
+    }
+  };
+  const repository = createRepository(transaction);
+
+  const result = await repository.rotateRefreshToken({
+    currentTokenHash: "inactive-user-hash",
+    replacementTokenHash: "unused-hash",
+    now: new Date("2026-06-23T00:00:00.000Z")
+  });
+
+  assert.deepEqual(result, { status: "invalid" });
+  assert.deepEqual(revocationArgs?.data, {
+    revokedAt: new Date("2026-06-23T00:00:00.000Z"),
+    revocationReason: "USER_INACTIVE"
+  });
+});
+
+test("AuthRepository revokes a token family when the organization is inactive", async () => {
+  let revocationArgs: Record<string, unknown> | undefined;
+  const transaction = {
+    refreshToken: {
+      findUnique: async () => ({
+        ...activeToken,
+        user: {
+          ...activeUser,
+          organization: {
+            isActive: false
+          }
+        }
+      }),
+      updateMany: async (args: Record<string, unknown>) => {
+        revocationArgs = args;
+        return { count: 1 };
+      }
+    }
+  };
+  const repository = createRepository(transaction);
+
+  const result = await repository.rotateRefreshToken({
+    currentTokenHash: "inactive-org-hash",
+    replacementTokenHash: "unused-hash",
+    now: new Date("2026-06-23T00:00:00.000Z")
+  });
+
+  assert.deepEqual(result, { status: "invalid" });
+  assert.deepEqual(revocationArgs?.data, {
+    revokedAt: new Date("2026-06-23T00:00:00.000Z"),
+    revocationReason: "USER_INACTIVE"
+  });
+});
+
+test("AuthRepository treats a failed rotation claim as reuse and revokes the family", async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const transaction = {
+    refreshToken: {
+      findUnique: async () => activeToken,
+      updateMany: async (args: Record<string, unknown>) => {
+        updates.push(args);
+        return updates.length === 1 ? { count: 0 } : { count: 1 };
+      }
+    }
+  };
+  const repository = createRepository(transaction);
+
+  const result = await repository.rotateRefreshToken({
+    currentTokenHash: "raced-hash",
+    replacementTokenHash: "unused-hash",
+    now: new Date("2026-06-23T00:00:00.000Z")
+  });
+
+  assert.deepEqual(result, { status: "invalid" });
+  assert.equal(updates.length, 2);
+  assert.deepEqual(updates[1]?.where, {
+    tokenFamilyId: activeToken.tokenFamilyId,
+    revokedAt: null
+  });
+  assert.deepEqual(updates[1]?.data, {
+    revokedAt: new Date("2026-06-23T00:00:00.000Z"),
+    revocationReason: "REUSE_DETECTED"
+  });
+});
+
+test("AuthRepository logout revokes the active refresh token family", async () => {
+  let revocationArgs: Record<string, unknown> | undefined;
+  const prismaService = {
+    refreshToken: {
+      findUnique: async () => ({
+        tokenFamilyId: activeToken.tokenFamilyId
+      }),
+      updateMany: async (args: Record<string, unknown>) => {
+        revocationArgs = args;
+        return { count: 1 };
+      }
+    }
+  } as unknown as PrismaService;
+  const repository = new AuthRepository(prismaService);
+
+  await repository.revokeRefreshTokenFamily(
+    "known-hash",
+    new Date("2026-06-23T00:00:00.000Z")
+  );
+
+  assert.deepEqual(revocationArgs?.where, {
+    tokenFamilyId: activeToken.tokenFamilyId,
+    revokedAt: null
+  });
+  assert.deepEqual(revocationArgs?.data, {
+    revokedAt: new Date("2026-06-23T00:00:00.000Z"),
+    revocationReason: "LOGOUT"
+  });
+});
+
 test("AuthRepository logout is idempotent for an unknown refresh token", async () => {
   let updateCalled = false;
   const prismaService = {

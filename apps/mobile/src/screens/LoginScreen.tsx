@@ -14,11 +14,12 @@ import { Screen } from "../shared/components/Screen";
 import { colors } from "../shared/theme";
 
 export function LoginScreen() {
-  const { login } = useAuth();
+  const { login, sessionMessage } = useAuth();
   const [email, setEmail] = useState("agent@opspulse.local");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const visibleMessage = errorMessage ?? sessionMessage;
 
   async function handleSubmit() {
     setErrorMessage(null);
@@ -89,9 +90,9 @@ export function LoginScreen() {
             />
           </View>
 
-          {errorMessage && (
+          {visibleMessage && (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errorMessage}</Text>
+              <Text style={styles.errorText}>{visibleMessage}</Text>
             </View>
           )}
 

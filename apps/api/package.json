@@ -12,7 +12,7 @@
     "prisma:status": "prisma migrate status --config prisma.config.ts",
     "prisma:studio": "prisma studio --config prisma.config.ts",
     "prisma:validate": "prisma validate --config prisma.config.ts",
-    "test": "pnpm --filter @opspulse/shared build && node --import tsx --test src/auth/*.spec.ts src/auth/guards/*.spec.ts src/common/**/*.spec.ts src/work-orders/*.spec.ts",
+    "test": "pnpm --filter @opspulse/shared build && node --import tsx --test src/auth/*.spec.ts src/auth/guards/*.spec.ts src/common/**/*.spec.ts src/config/*.spec.ts src/work-orders/*.spec.ts",
     "typecheck": "pnpm --filter @opspulse/shared build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

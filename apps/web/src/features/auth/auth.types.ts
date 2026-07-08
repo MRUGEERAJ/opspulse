@@ -1,4 +1,5 @@
 import type { UserRole } from "@opspulse/shared";
+import type { ApiRequestOptions } from "../../shared/api/api-client";
 
 export type WebAuthRole = Extract<UserRole, "ADMIN" | "MANAGER" | "FIELD_AGENT">;
 
@@ -34,9 +35,19 @@ export type AuthSessionResponse = StoredAuthTokens & {
 
 export type AuthStatus = "checking" | "authenticated" | "anonymous";
 
+export type AuthenticatedRequestOptions = Omit<
+  ApiRequestOptions,
+  "accessToken"
+>;
+
 export type AuthContextValue = {
   status: AuthStatus;
   session: AuthSession | null;
+  sessionMessage: string | null;
+  authenticatedRequest: <T>(
+    path: string,
+    options?: AuthenticatedRequestOptions
+  ) => Promise<T>;
   login: (input: LoginRequest) => Promise<AuthSession>;
   logout: () => Promise<void>;
 };

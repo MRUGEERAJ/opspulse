@@ -88,6 +88,33 @@ Trade-off:
 portfolio project. A larger production system may choose native bcrypt or
 Argon2 after benchmarking its security and performance requirements.
 
+### Refresh Token Rotation
+
+What it is:
+
+Refresh token rotation replaces the refresh token every time the client asks
+for a new access token. The old refresh token is revoked and linked to its
+replacement.
+
+Why companies use it:
+
+It limits the damage if a refresh token is stolen. If an old rotated token is
+used again, the backend can treat it as reuse and revoke the whole token family.
+
+How OpsPulse FieldOps uses it:
+
+The API stores only hashed refresh tokens in PostgreSQL. Web and mobile refresh
+only after a `401`, retry the original request once, and share one in-flight
+refresh operation so concurrent expired requests do not accidentally reuse the
+same old token.
+
+Interview explanation:
+
+> I rotate refresh tokens and serialize client-side refresh calls. That matters
+> because two simultaneous `401` responses could otherwise both use the same old
+> refresh token. With reuse detection, the second refresh would look suspicious
+> and revoke the session.
+
 ### DTO Validation
 
 What it is:

@@ -10,7 +10,7 @@ type LoginLocationState = {
 };
 
 export function LoginPage() {
-  const { status, session, login } = useAuth();
+  const { status, session, sessionMessage, login } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as LoginLocationState | null;
@@ -18,6 +18,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const visibleMessage = errorMessage ?? sessionMessage;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,9 +104,9 @@ export function LoginPage() {
             />
           </label>
 
-          {errorMessage ? (
+          {visibleMessage ? (
             <div className="form-error" role="alert">
-              {errorMessage}
+              {visibleMessage}
             </div>
           ) : null}
 

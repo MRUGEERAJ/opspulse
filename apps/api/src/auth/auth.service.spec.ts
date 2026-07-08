@@ -42,8 +42,14 @@ test("AuthService login returns access and refresh tokens without storing plaint
     verify: async () => true
   } as unknown as PasswordService;
   const jwtService = {
-    signAsync: async (payload: unknown) => {
+    signAsync: async (payload: unknown, options: unknown) => {
       assert.deepEqual(payload, { sub: activeUser.id, type: "access" });
+      assert.deepEqual(options, {
+        secret: "test-secret-with-at-least-32-characters",
+        issuer: "opspulse-api",
+        audience: "opspulse-clients",
+        expiresIn: 900
+      });
       return "signed-token";
     }
   } as unknown as JwtService;

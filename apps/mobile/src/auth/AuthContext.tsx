@@ -5,10 +5,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 
-import { ApiError } from "../shared/api/api-client";
+import { ApiError, apiRequest } from "../shared/api/api-client";
 import {
   getCurrentUser,
   loginWithPassword,
@@ -22,6 +23,7 @@ import {
 } from "./auth.storage";
 import type {
   AuthContextValue,
+  AuthenticatedRequestOptions,
   AuthSession,
   AuthSessionResponse,
   AuthStatus,
@@ -31,12 +33,16 @@ import type {
 } from "./auth.types";
 
 const FIELD_AGENT_ONLY_MESSAGE = "Mobile app is only for Field Agents.";
+const SESSION_EXPIRED_MESSAGE = "Your session expired. Please sign in again.";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthStatus>("checking");
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const sessionRef = useRef<AuthSession | null>(null);
+  const refreshPromiseRef = useRef<Promise<AuthSession> | null>(null);
 
   const setAuthenticatedSession = useCallback(
     async (nextSession: AuthSession) => {
@@ -44,15 +50,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
         accessToken: nextSession.accessToken,
         refreshToken: nextSession.refreshToken
       });
+      sessionRef.current = nextSession;
       setSession(nextSession);
+      setSessionMessage(null);
       setStatus("authenticated");
     },
     []
   );
 
-  const clearSession = useCallback(async () => {
+  const clearSession = useCallback(async (message?: string) => {
     await clearStoredAuthTokens();
+    sessionRef.current = null;
     setSession(null);
+    setSessionMessage(message ?? null);
     setStatus("anonymous");
   }, []);
 
@@ -69,7 +79,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      const restoredSession = await restoreFromTokens(storedTokens);
+      let restoredSession: AuthSession | null;
+
+      try {
+        restoredSession = await restoreFromTokens(storedTokens);
+      } catch (error) {
+        if (isActive) {
+          sessionRef.current = null;
+          setSession(null);
+          setSessionMessage(getSessionRestoreErrorMessage(error));
+          setStatus("anonymous");
+        }
+        return;
+      }
 
       if (!isActive) {
         return;
@@ -78,7 +100,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (restoredSession) {
         await setAuthenticatedSession(restoredSession);
       } else {
-        await clearSession();
+        await clearSession(SESSION_EXPIRED_MESSAGE);
       }
     }
 
@@ -105,6 +127,101 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [setAuthenticatedSession]
   );
 
+  const refreshSession = useCallback(async (): Promise<AuthSession> => {
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+
+    const tokens = sessionRef.current
+      ? {
+          accessToken: sessionRef.current.accessToken,
+          refreshToken: sessionRef.current.refreshToken
+        }
+      : await readStoredAuthTokens();
+
+    if (!tokens) {
+      throw new ApiError(SESSION_EXPIRED_MESSAGE, 401);
+    }
+
+    const refreshPromise = (async () => {
+      const refreshed = await refreshAuthSession(tokens.refreshToken);
+      const user = await getCurrentUser(refreshed.accessToken);
+      const nextSession = toFieldAgentSession({
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        user
+      });
+
+      if (!nextSession) {
+        throw new ApiError(FIELD_AGENT_ONLY_MESSAGE, 403);
+      }
+
+      await setAuthenticatedSession(nextSession);
+      return nextSession;
+    })();
+
+    refreshPromiseRef.current = refreshPromise;
+
+    try {
+      return await refreshPromise;
+    } finally {
+      refreshPromiseRef.current = null;
+    }
+  }, [setAuthenticatedSession]);
+
+  const authenticatedRequest = useCallback(
+    async <T,>(
+      path: string,
+      options: AuthenticatedRequestOptions = {}
+    ): Promise<T> => {
+      const activeSession = sessionRef.current;
+
+      if (!activeSession) {
+        throw new ApiError(SESSION_EXPIRED_MESSAGE, 401);
+      }
+
+      try {
+        return await apiRequest<T>(path, {
+          ...options,
+          accessToken: activeSession.accessToken
+        });
+      } catch (error) {
+        if (!isUnauthorizedError(error)) {
+          throw error;
+        }
+      }
+
+      let refreshedSession: AuthSession;
+
+      try {
+        refreshedSession = await refreshSession();
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 403) {
+          await clearSession(error.message);
+          throw error;
+        }
+
+        await clearSession(SESSION_EXPIRED_MESSAGE);
+        throw new ApiError(SESSION_EXPIRED_MESSAGE, 401);
+      }
+
+      try {
+        return await apiRequest<T>(path, {
+          ...options,
+          accessToken: refreshedSession.accessToken
+        });
+      } catch (error) {
+        if (isUnauthorizedError(error)) {
+          await clearSession(SESSION_EXPIRED_MESSAGE);
+          throw new ApiError(SESSION_EXPIRED_MESSAGE, 401);
+        }
+
+        throw error;
+      }
+    },
+    [clearSession, refreshSession]
+  );
+
   const logout = useCallback(async () => {
     const tokens = session
       ? {
@@ -128,10 +245,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     () => ({
       status,
       session,
+      sessionMessage,
+      authenticatedRequest,
       login,
       logout
     }),
-    [login, logout, session, status]
+    [authenticatedRequest, login, logout, session, sessionMessage, status]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -158,7 +277,7 @@ async function restoreFromTokens(
     });
   } catch (error) {
     if (!isUnauthorizedError(error)) {
-      return null;
+      throw error;
     }
   }
 
@@ -171,7 +290,11 @@ async function restoreFromTokens(
       refreshToken: refreshed.refreshToken,
       user
     });
-  } catch {
+  } catch (error) {
+    if (!isUnauthorizedError(error)) {
+      throw error;
+    }
+
     return null;
   }
 }
@@ -210,4 +333,12 @@ function toFieldAgentSession(
 
 function isUnauthorizedError(error: unknown): boolean {
   return error instanceof ApiError && error.statusCode === 401;
+}
+
+function getSessionRestoreErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  return "Could not restore your session. Check that the API is running.";
 }
