@@ -28,6 +28,7 @@ export type ListWorkOrdersInput = {
   limit: number;
   status?: WorkOrderStatus;
   priority?: WorkOrderPriority;
+  q?: string;
 };
 
 export type ListAssignedWorkOrdersInput = ListWorkOrdersInput & {

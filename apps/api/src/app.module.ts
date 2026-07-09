@@ -5,6 +5,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { validateEnv } from "./config/env.validation.js";
 import { HealthModule } from "./health/health.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
+import { UsersModule } from "./users/users.module.js";
 import { WorkOrdersModule } from "./work-orders/work-orders.module.js";
 
 @Module({
@@ -17,6 +18,7 @@ import { WorkOrdersModule } from "./work-orders/work-orders.module.js";
     PrismaModule,
     AuthModule,
     HealthModule,
+    UsersModule,
     WorkOrdersModule
   ]
 })

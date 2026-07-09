@@ -1,10 +1,19 @@
-import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min
+} from "class-validator";
 
 import {
   WorkOrderPriority,
   WorkOrderStatus
 } from "../../generated/prisma/enums.js";
+import { trimString } from "./work-order-dto.transforms.js";
 
 export class ListWorkOrdersQueryDto {
   @IsOptional()
@@ -27,4 +36,10 @@ export class ListWorkOrdersQueryDto {
   @IsOptional()
   @IsEnum(WorkOrderPriority)
   priority?: WorkOrderPriority;
+
+  @Transform(trimString)
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  q?: string;
 }

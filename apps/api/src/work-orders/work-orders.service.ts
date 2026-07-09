@@ -57,13 +57,14 @@ export class WorkOrdersService {
   async list(actor: AuthenticatedActor, query: ListWorkOrdersQueryDto) {
     assertReader(actor);
 
-    // TODO(assignments): restrict Manager reads to their team when team ownership exists.
+    // V1 simplification: Managers can read organization work orders until team ownership exists.
     const { data, total } = await this.workOrdersRepository.list({
       organizationId: actor.organizationId,
       page: query.page,
       limit: query.limit,
       status: query.status,
-      priority: query.priority
+      priority: query.priority,
+      q: query.q
     });
     const totalPages = Math.ceil(total / query.limit);
 
@@ -93,7 +94,8 @@ export class WorkOrdersService {
         page: query.page,
         limit: query.limit,
         status: query.status,
-        priority: query.priority
+        priority: query.priority,
+        q: query.q
       });
     const totalPages = Math.ceil(total / query.limit);
 
@@ -138,7 +140,7 @@ export class WorkOrdersService {
     id: string,
     dto: AssignWorkOrderDto
   ) {
-    assertManager(actor);
+    assertAssigner(actor);
     const workOrder = await this.findOrThrow(actor.organizationId, id);
 
     if (
@@ -377,9 +379,9 @@ export class WorkOrdersService {
   }
 }
 
-function assertManager(actor: AuthenticatedActor): void {
-  if (actor.role !== UserRole.MANAGER) {
-    throw new ForbiddenException("Manager role is required");
+function assertAssigner(actor: AuthenticatedActor): void {
+  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.MANAGER) {
+    throw new ForbiddenException("Admin or Manager role is required");
   }
 }
 

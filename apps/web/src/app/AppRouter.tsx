@@ -7,6 +7,7 @@ import {
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { UnauthorizedPage } from "../features/auth/UnauthorizedPage";
+import { CreateWorkOrderPage } from "../features/work-orders/CreateWorkOrderPage";
 import { WorkOrderDetailPage } from "../features/work-orders/WorkOrderDetailPage";
 import { WorkOrdersPage } from "../features/work-orders/WorkOrdersPage";
 import { AppLayout } from "./AppLayout";
@@ -34,6 +35,10 @@ const router = createBrowserRouter([
           {
             path: "/work-orders",
             element: <WorkOrdersPage />
+          },
+          {
+            path: "/work-orders/new",
+            element: <CreateWorkOrderPage />
           },
           {
             path: "/work-orders/:workOrderId",

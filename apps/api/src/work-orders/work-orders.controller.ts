@@ -75,7 +75,7 @@ export class WorkOrdersController {
   }
 
   @Patch(":id/assign")
-  @Roles(UserRole.MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   assign(
     @CurrentActor() actor: AuthenticatedActor,
     @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,

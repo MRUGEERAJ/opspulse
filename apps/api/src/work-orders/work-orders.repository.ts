@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { AuthenticatedActor } from "../auth/auth.types.js";
-import type { WorkOrder } from "../generated/prisma/client.js";
+import type { Prisma, WorkOrder } from "../generated/prisma/client.js";
 import {
   StatusChangeSource,
   WorkOrderStatus
@@ -64,10 +64,11 @@ export class WorkOrdersRepository {
   }
 
   async list(input: ListWorkOrdersInput) {
-    const where = {
+    const where: Prisma.WorkOrderWhereInput = {
       organizationId: input.organizationId,
       ...(input.status ? { status: input.status } : {}),
-      ...(input.priority ? { priority: input.priority } : {})
+      ...(input.priority ? { priority: input.priority } : {}),
+      ...buildSearchFilter(input.q)
     };
 
     const [total, data] = await this.prismaService.$transaction([
@@ -76,7 +77,7 @@ export class WorkOrdersRepository {
         where,
         skip: (input.page - 1) * input.limit,
         take: input.limit,
-        orderBy: [{ updatedAt: "desc" }, { id: "desc" }]
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }]
       })
     ]);
 
@@ -84,10 +85,11 @@ export class WorkOrdersRepository {
   }
 
   async listAssignedToAssignee(input: ListAssignedWorkOrdersInput) {
-    const where = {
+    const where: Prisma.WorkOrderWhereInput = {
       organizationId: input.organizationId,
       ...(input.status ? { status: input.status } : {}),
       ...(input.priority ? { priority: input.priority } : {}),
+      ...buildSearchFilter(input.q),
       assignments: {
         some: {
           assigneeId: input.assigneeId,
@@ -102,7 +104,7 @@ export class WorkOrdersRepository {
         where,
         skip: (input.page - 1) * input.limit,
         take: input.limit,
-        orderBy: [{ updatedAt: "desc" }, { id: "desc" }]
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }]
       })
     ]);
 
@@ -329,4 +331,31 @@ export class WorkOrdersRepository {
     });
   }
 
+}
+
+function buildSearchFilter(
+  query: string | undefined
+): Pick<Prisma.WorkOrderWhereInput, "OR"> {
+  if (!query) {
+    return {};
+  }
+
+  if (isUuid(query)) {
+    return {
+      OR: [
+        { id: query },
+        { title: { contains: query, mode: "insensitive" } }
+      ]
+    };
+  }
+
+  return {
+    OR: [{ title: { contains: query, mode: "insensitive" } }]
+  };
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
 }

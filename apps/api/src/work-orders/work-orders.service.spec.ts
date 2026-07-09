@@ -50,6 +50,31 @@ test("manager can assign a work order to an active FieldAgent", async () => {
   assert.equal(result.status, WorkOrderStatus.ASSIGNED);
 });
 
+test("admin can assign a work order to an active FieldAgent", async () => {
+  let assignedAssigneeId: string | undefined;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.CREATED),
+    findAssigneeById: async () => ({
+      id: agentId,
+      organizationId,
+      role: UserRole.FIELD_AGENT,
+      isActive: true
+    }),
+    assign: async (_actor, _workOrder, assigneeId) => {
+      assignedAssigneeId = assigneeId;
+      return createWorkOrder(WorkOrderStatus.ASSIGNED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.assign(adminActor(), workOrderId, {
+    assigneeId: agentId
+  });
+
+  assert.equal(assignedAssigneeId, agentId);
+  assert.equal(result.status, WorkOrderStatus.ASSIGNED);
+});
+
 test("manager cannot assign a work order to a non-FieldAgent user", async () => {
   const repository = createRepository({
     findById: async () => createWorkOrder(WorkOrderStatus.CREATED),
@@ -68,6 +93,29 @@ test("manager cannot assign a work order to a non-FieldAgent user", async () => 
     }),
     (error: unknown) => error instanceof BadRequestException
   );
+});
+
+test("admin and manager list passes search query to repository", async () => {
+  let requestedQuery: string | undefined;
+  const repository = createRepository({
+    list: async (input) => {
+      requestedQuery = input.q;
+      return {
+        data: [createWorkOrder(WorkOrderStatus.CREATED)],
+        total: 1
+      };
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.list(managerActor(), {
+    page: 1,
+    limit: 20,
+    q: "generator"
+  });
+
+  assert.equal(requestedQuery, "generator");
+  assert.equal(result.data.length, 1);
 });
 
 test("FieldAgent can list only work orders assigned to themselves", async () => {
@@ -282,6 +330,7 @@ function createRepository(
   overrides: Partial<WorkOrdersRepository>
 ): WorkOrdersRepository {
   return {
+    list: async () => ({ data: [], total: 0 }),
     findById: async () => null,
     findAssigneeById: async () => null,
     assign: async () => null,
