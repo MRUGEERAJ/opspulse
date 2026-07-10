@@ -5,7 +5,7 @@ import { joinUrl, toApiError, unwrapApiData } from "./api-client.utils";
 const REQUEST_TIMEOUT_MS = 5_000;
 
 export type ApiRequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "PATCH" | "POST";
   body?: unknown;
   accessToken?: string;
   unwrapData?: boolean;
