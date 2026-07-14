@@ -1,6 +1,6 @@
-import "@react-native/js-polyfills/error-guard";
+import '@react-native/js-polyfills/error-guard';
 
-import mock from "@react-native/jest-preset/jest/mock";
+import mock from '@react-native/jest-preset/jest/mock';
 
 global.__DEV__ = true;
 global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,104 +12,128 @@ Object.defineProperties(global, {
     value(id) {
       return clearTimeout(id);
     },
-    writable: true
+    writable: true,
   },
   nativeFabricUIManager: {
     configurable: true,
     value: {},
-    writable: true
+    writable: true,
   },
   performance: {
     configurable: true,
     value: {
-      now: jest.fn(Date.now)
+      now: jest.fn(Date.now),
     },
-    writable: true
+    writable: true,
   },
   requestAnimationFrame: {
     configurable: true,
     value(callback) {
       return setTimeout(() => callback(jest.now()), 0);
     },
-    writable: true
+    writable: true,
   },
   window: {
     configurable: true,
     value: global,
-    writable: true
-  }
+    writable: true,
+  },
 });
 
-mock("m#react-native/Libraries/AppState/AppState", "m#./mocks/AppState");
+mock('m#react-native/Libraries/AppState/AppState', 'm#./mocks/AppState');
 mock(
-  "m#react-native/Libraries/BatchedBridge/NativeModules",
-  "m#./mocks/NativeModules"
+  'm#react-native/Libraries/BatchedBridge/NativeModules',
+  'm#./mocks/NativeModules',
 );
 mock(
-  "m#react-native/Libraries/Components/AccessibilityInfo/AccessibilityInfo",
-  "m#./mocks/AccessibilityInfo"
+  'm#react-native/Libraries/Components/AccessibilityInfo/AccessibilityInfo',
+  'm#./mocks/AccessibilityInfo',
 );
 mock(
-  "m#react-native/Libraries/Components/ActivityIndicator/ActivityIndicator",
-  "m#./mocks/ActivityIndicator"
+  'm#react-native/Libraries/Components/ActivityIndicator/ActivityIndicator',
+  'm#./mocks/ActivityIndicator',
 );
 mock(
-  "m#react-native/Libraries/Components/RefreshControl/RefreshControl",
-  "m#./mocks/RefreshControl"
+  'm#react-native/Libraries/Components/RefreshControl/RefreshControl',
+  'm#./mocks/RefreshControl',
 );
 mock(
-  "m#react-native/Libraries/Components/ScrollView/ScrollView",
-  "m#./mocks/ScrollView"
+  'm#react-native/Libraries/Components/ScrollView/ScrollView',
+  'm#./mocks/ScrollView',
 );
 mock(
-  "m#react-native/Libraries/Components/TextInput/TextInput",
-  "m#./mocks/TextInput"
+  'm#react-native/Libraries/Components/TextInput/TextInput',
+  'm#./mocks/TextInput',
 );
-mock("m#react-native/Libraries/Components/View/View", "m#./mocks/View");
+mock('m#react-native/Libraries/Components/View/View', 'm#./mocks/View');
 mock(
-  "m#react-native/Libraries/Components/View/ViewNativeComponent",
-  "m#./mocks/ViewNativeComponent"
-);
-mock(
-  "m#react-native/Libraries/Core/InitializeCore",
-  "m#./mocks/InitializeCore"
-);
-mock("m#react-native/Libraries/Core/NativeExceptionsManager");
-mock("m#react-native/Libraries/Image/Image", "m#./mocks/Image");
-mock("m#react-native/Libraries/Linking/Linking", "m#./mocks/Linking");
-mock("m#react-native/Libraries/Modal/Modal", "m#./mocks/Modal");
-mock(
-  "m#react-native/Libraries/NativeComponent/NativeComponentRegistry",
-  "m#./mocks/NativeComponentRegistry"
+  'm#react-native/Libraries/Components/View/ViewNativeComponent',
+  'm#./mocks/ViewNativeComponent',
 );
 mock(
-  "m#react-native/Libraries/ReactNative/RendererProxy",
-  "m#./mocks/RendererProxy"
+  'm#react-native/Libraries/Core/InitializeCore',
+  'm#./mocks/InitializeCore',
+);
+mock('m#react-native/Libraries/Core/NativeExceptionsManager');
+mock('m#react-native/Libraries/Image/Image', 'm#./mocks/Image');
+mock('m#react-native/Libraries/Linking/Linking', 'm#./mocks/Linking');
+mock('m#react-native/Libraries/Modal/Modal', 'm#./mocks/Modal');
+mock(
+  'm#react-native/Libraries/NativeComponent/NativeComponentRegistry',
+  'm#./mocks/NativeComponentRegistry',
 );
 mock(
-  "m#react-native/Libraries/ReactNative/requireNativeComponent",
-  "m#./mocks/requireNativeComponent"
+  'm#react-native/Libraries/ReactNative/RendererProxy',
+  'm#./mocks/RendererProxy',
 );
-mock("m#react-native/Libraries/ReactNative/UIManager", "m#./mocks/UIManager");
-mock("m#react-native/Libraries/Text/Text", "m#./mocks/Text");
 mock(
-  "m#react-native/Libraries/Utilities/useColorScheme",
-  "m#./mocks/useColorScheme"
+  'm#react-native/Libraries/ReactNative/requireNativeComponent',
+  'm#./mocks/requireNativeComponent',
 );
-mock("m#react-native/Libraries/Vibration/Vibration", "m#./mocks/Vibration");
+mock('m#react-native/Libraries/ReactNative/UIManager', 'm#./mocks/UIManager');
+mock('m#react-native/Libraries/Text/Text', 'm#./mocks/Text');
+mock(
+  'm#react-native/Libraries/Utilities/useColorScheme',
+  'm#./mocks/useColorScheme',
+);
+mock('m#react-native/Libraries/Vibration/Vibration', 'm#./mocks/Vibration');
 
-jest.mock("react-native-keychain", () => ({
+jest.mock('react-native-keychain', () => ({
   ACCESSIBLE: {
-    WHEN_UNLOCKED_THIS_DEVICE_ONLY: "WHEN_UNLOCKED_THIS_DEVICE_ONLY"
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   },
   getGenericPassword: jest.fn(async () => false),
   resetGenericPassword: jest.fn(async () => true),
-  setGenericPassword: jest.fn(async () => true)
+  setGenericPassword: jest.fn(async () => true),
 }));
 
-jest.mock("react-native-config", () => ({
+jest.mock(
+  '@react-native-async-storage/async-storage',
+  () => {
+    const storage = new Map();
+
+    return {
+      __esModule: true,
+      default: {
+        clear: jest.fn(async () => {
+          storage.clear();
+        }),
+        getItem: jest.fn(async key => storage.get(key) ?? null),
+        removeItem: jest.fn(async key => {
+          storage.delete(key);
+        }),
+        setItem: jest.fn(async (key, value) => {
+          storage.set(key, value);
+        }),
+      },
+    };
+  },
+  { virtual: true },
+);
+
+jest.mock('react-native-config', () => ({
   __esModule: true,
   default: {
-    API_URL: "http://127.0.0.1:3000"
-  }
+    API_URL: 'http://127.0.0.1:3000',
+  },
 }));

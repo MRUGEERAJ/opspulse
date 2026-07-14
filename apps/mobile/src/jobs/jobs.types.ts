@@ -1,11 +1,8 @@
-import type {
-  WorkOrderPriority,
-  WorkOrderStatus
-} from "@opspulse/shared";
+import type { WorkOrderPriority, WorkOrderStatus } from '@opspulse/shared';
 
-import type { AuthContextValue } from "../auth/auth.types";
+import type { AuthContextValue } from '../auth/auth.types';
 
-export type AuthenticatedApiRequest = AuthContextValue["authenticatedRequest"];
+export type AuthenticatedApiRequest = AuthContextValue['authenticatedRequest'];
 
 export type AssignedJob = {
   id: string;
@@ -44,6 +41,18 @@ export type AssignedJobsResponse = {
 export type AssignedJobsQuery = {
   page: number;
   limit: number;
+};
+
+export type AssignedJobsCacheOwner = {
+  organizationId: string;
+  userId: string;
+};
+
+export type CachedAssignedJobs = {
+  version: 1;
+  owner: AssignedJobsCacheOwner;
+  jobs: AssignedJob[];
+  lastSyncedAt: string;
 };
 
 export type UpdateJobStatusRequest = {

@@ -6,21 +6,22 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState
-} from "react";
+  useState,
+} from 'react';
 
-import { ApiError, apiRequest } from "../shared/api/api-client";
+import { clearCachedAssignedJobs } from '../jobs/jobs.storage';
+import { ApiError, apiRequest } from '../shared/api/api-client';
 import {
   getCurrentUser,
   loginWithPassword,
   logoutAuthSession,
-  refreshAuthSession
-} from "./auth.api";
+  refreshAuthSession,
+} from './auth.api';
 import {
   clearStoredAuthTokens,
   readStoredAuthTokens,
-  saveStoredAuthTokens
-} from "./auth.storage";
+  saveStoredAuthTokens,
+} from './auth.storage';
 import type {
   AuthContextValue,
   AuthenticatedRequestOptions,
@@ -29,16 +30,16 @@ import type {
   AuthStatus,
   AuthUser,
   LoginRequest,
-  StoredAuthTokens
-} from "./auth.types";
+  StoredAuthTokens,
+} from './auth.types';
 
-const FIELD_AGENT_ONLY_MESSAGE = "Mobile app is only for Field Agents.";
-const SESSION_EXPIRED_MESSAGE = "Your session expired. Please sign in again.";
+const FIELD_AGENT_ONLY_MESSAGE = 'Mobile app is only for Field Agents.';
+const SESSION_EXPIRED_MESSAGE = 'Your session expired. Please sign in again.';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [status, setStatus] = useState<AuthStatus>("checking");
+  const [status, setStatus] = useState<AuthStatus>('checking');
   const [session, setSession] = useState<AuthSession | null>(null);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const sessionRef = useRef<AuthSession | null>(null);
@@ -48,14 +49,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     async (nextSession: AuthSession) => {
       await saveStoredAuthTokens({
         accessToken: nextSession.accessToken,
-        refreshToken: nextSession.refreshToken
+        refreshToken: nextSession.refreshToken,
       });
       sessionRef.current = nextSession;
       setSession(nextSession);
       setSessionMessage(null);
-      setStatus("authenticated");
+      setStatus('authenticated');
     },
-    []
+    [],
   );
 
   const clearSession = useCallback(async (message?: string) => {
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     sessionRef.current = null;
     setSession(null);
     setSessionMessage(message ?? null);
-    setStatus("anonymous");
+    setStatus('anonymous');
   }, []);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (!storedTokens) {
         if (isActive) {
-          setStatus("anonymous");
+          setStatus('anonymous');
         }
         return;
       }
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           sessionRef.current = null;
           setSession(null);
           setSessionMessage(getSessionRestoreErrorMessage(error));
-          setStatus("anonymous");
+          setStatus('anonymous');
         }
         return;
       }
@@ -124,7 +125,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       await setAuthenticatedSession(nextSession);
       return nextSession;
     },
-    [setAuthenticatedSession]
+    [setAuthenticatedSession],
   );
 
   const refreshSession = useCallback(async (): Promise<AuthSession> => {
@@ -135,7 +136,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const tokens = sessionRef.current
       ? {
           accessToken: sessionRef.current.accessToken,
-          refreshToken: sessionRef.current.refreshToken
+          refreshToken: sessionRef.current.refreshToken,
         }
       : await readStoredAuthTokens();
 
@@ -149,7 +150,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const nextSession = toFieldAgentSession({
         accessToken: refreshed.accessToken,
         refreshToken: refreshed.refreshToken,
-        user
+        user,
       });
 
       if (!nextSession) {
@@ -172,7 +173,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const authenticatedRequest = useCallback(
     async <T,>(
       path: string,
-      options: AuthenticatedRequestOptions = {}
+      options: AuthenticatedRequestOptions = {},
     ): Promise<T> => {
       const activeSession = sessionRef.current;
 
@@ -183,7 +184,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         return await apiRequest<T>(path, {
           ...options,
-          accessToken: activeSession.accessToken
+          accessToken: activeSession.accessToken,
         });
       } catch (error) {
         if (!isUnauthorizedError(error)) {
@@ -208,7 +209,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         return await apiRequest<T>(path, {
           ...options,
-          accessToken: refreshedSession.accessToken
+          accessToken: refreshedSession.accessToken,
         });
       } catch (error) {
         if (isUnauthorizedError(error)) {
@@ -219,14 +220,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
         throw error;
       }
     },
-    [clearSession, refreshSession]
+    [clearSession, refreshSession],
   );
 
   const logout = useCallback(async () => {
+    const activeSession = sessionRef.current ?? session;
     const tokens = session
       ? {
           accessToken: session.accessToken,
-          refreshToken: session.refreshToken
+          refreshToken: session.refreshToken,
         }
       : await readStoredAuthTokens();
 
@@ -235,6 +237,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await logoutAuthSession(tokens);
       } catch {
         // Local logout must still succeed if the API is unavailable.
+      }
+    }
+
+    if (activeSession) {
+      try {
+        await clearCachedAssignedJobs({
+          organizationId: activeSession.user.organizationId,
+          userId: activeSession.user.id,
+        });
+      } catch {
+        // Logout should not leave the user stuck if local cache cleanup fails.
       }
     }
 
@@ -248,9 +261,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       sessionMessage,
       authenticatedRequest,
       login,
-      logout
+      logout,
     }),
-    [authenticatedRequest, login, logout, session, sessionMessage, status]
+    [authenticatedRequest, login, logout, session, sessionMessage, status],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -260,20 +273,20 @@ export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error("useAuth must be used inside AuthProvider");
+    throw new Error('useAuth must be used inside AuthProvider');
   }
 
   return context;
 }
 
 async function restoreFromTokens(
-  tokens: StoredAuthTokens
+  tokens: StoredAuthTokens,
 ): Promise<AuthSession | null> {
   try {
     const user = await getCurrentUser(tokens.accessToken);
     return toFieldAgentSession({
       ...tokens,
-      user
+      user,
     });
   } catch (error) {
     if (!isUnauthorizedError(error)) {
@@ -288,7 +301,7 @@ async function restoreFromTokens(
     return toFieldAgentSession({
       accessToken: refreshed.accessToken,
       refreshToken: refreshed.refreshToken,
-      user
+      user,
     });
   } catch (error) {
     if (!isUnauthorizedError(error)) {
@@ -300,12 +313,12 @@ async function restoreFromTokens(
 }
 
 async function rejectNonFieldAgentLogin(
-  response: AuthSessionResponse
+  response: AuthSessionResponse,
 ): Promise<void> {
   try {
     await logoutAuthSession({
       accessToken: response.accessToken,
-      refreshToken: response.refreshToken
+      refreshToken: response.refreshToken,
     });
   } catch {
     // The important local behavior is that we do not keep this mobile session.
@@ -315,9 +328,9 @@ async function rejectNonFieldAgentLogin(
 }
 
 function toFieldAgentSession(
-  input: StoredAuthTokens & { user: AuthUser }
+  input: StoredAuthTokens & { user: AuthUser },
 ): AuthSession | null {
-  if (input.user.role !== "FIELD_AGENT") {
+  if (input.user.role !== 'FIELD_AGENT') {
     return null;
   }
 
@@ -326,8 +339,8 @@ function toFieldAgentSession(
     refreshToken: input.refreshToken,
     user: {
       ...input.user,
-      role: input.user.role
-    }
+      role: input.user.role,
+    },
   };
 }
 
@@ -340,5 +353,5 @@ function getSessionRestoreErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "Could not restore your session. Check that the API is running.";
+  return 'Could not restore your session. Check that the API is running.';
 }

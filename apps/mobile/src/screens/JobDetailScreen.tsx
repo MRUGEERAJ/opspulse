@@ -1,63 +1,123 @@
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useState } from "react";
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
   TextInput,
-  View
-} from "react-native";
+  View,
+} from 'react-native';
 
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from '../auth/AuthContext';
 import {
   completeAssignedJob,
   getAssignedJob,
-  startAssignedJob
-} from "../jobs/jobs.api";
-import type { AssignedJob } from "../jobs/jobs.types";
+  startAssignedJob,
+} from '../jobs/jobs.api';
 import {
+  readCachedAssignedJobs,
+  upsertCachedAssignedJob,
+} from '../jobs/jobs.storage';
+import type { AssignedJob, AssignedJobsCacheOwner } from '../jobs/jobs.types';
+import {
+  canFallbackToAssignedJobsCache,
   formatJobDueDate,
+  formatLastSyncedAt,
   getJobPriorityLabel,
   getJobStatusLabel,
   isCompleteJobActionAvailable,
-  isStartJobActionAvailable
-} from "../jobs/jobs.utils";
-import type { RootStackParamList } from "../navigation/navigation.types";
-import { ApiError } from "../shared/api/api-client";
-import { PrimaryButton } from "../shared/components/PrimaryButton";
-import { Screen } from "../shared/components/Screen";
-import { colors } from "../shared/theme";
+  isStartJobActionAvailable,
+} from '../jobs/jobs.utils';
+import type { RootStackParamList } from '../navigation/navigation.types';
+import { ApiError } from '../shared/api/api-client';
+import { PrimaryButton } from '../shared/components/PrimaryButton';
+import { Screen } from '../shared/components/Screen';
+import { colors } from '../shared/theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, "JobDetail">;
+type Props = NativeStackScreenProps<RootStackParamList, 'JobDetail'>;
 
 const COMPLETION_NOTES_MIN_LENGTH = 3;
 
 export function JobDetailScreen({ route }: Props) {
-  const { authenticatedRequest } = useAuth();
+  const { authenticatedRequest, session } = useAuth();
   const [job, setJob] = useState<AssignedJob | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isStartingJob, setIsStartingJob] = useState(false);
   const [isCompletingJob, setIsCompletingJob] = useState(false);
-  const [completionNotes, setCompletionNotes] = useState("");
+  const [isShowingCachedData, setIsShowingCachedData] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [completionNotes, setCompletionNotes] = useState('');
   const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const cacheOwner = useMemo(
+    () => (session ? getAssignedJobsCacheOwner(session.user) : null),
+    [session],
+  );
+
+  const cacheAssignedJob = useCallback(
+    async (nextJob: AssignedJob) => {
+      if (!cacheOwner) {
+        return;
+      }
+
+      const nextLastSyncedAt = new Date().toISOString();
+      setLastSyncedAt(nextLastSyncedAt);
+      try {
+        await upsertCachedAssignedJob(cacheOwner, nextJob, nextLastSyncedAt);
+      } catch {
+        // Live detail should stay usable even if cache persistence fails.
+      }
+    },
+    [cacheOwner],
+  );
 
   const loadJob = useCallback(async () => {
     setIsInitialLoading(true);
     setLoadErrorMessage(null);
 
+    if (!cacheOwner) {
+      setLoadErrorMessage(
+        'Could not identify the current field agent session.',
+      );
+      setIsInitialLoading(false);
+      return;
+    }
+
     try {
       const response = await getAssignedJob(
         authenticatedRequest,
-        route.params.jobId
+        route.params.jobId,
       );
       setJob(response);
+      setIsShowingCachedData(false);
+      await cacheAssignedJob(response);
     } catch (error) {
+      if (canFallbackToAssignedJobsCache(error)) {
+        const cachedJobs = await readCachedAssignedJobs(cacheOwner).catch(
+          () => null,
+        );
+        const cachedJob =
+          cachedJobs?.jobs.find(item => item.id === route.params.jobId) ?? null;
+
+        if (cachedJob) {
+          setJob(cachedJob);
+          setLastSyncedAt(cachedJobs?.lastSyncedAt ?? null);
+          setIsShowingCachedData(true);
+          return;
+        }
+
+        setLoadErrorMessage(
+          'Live data is unavailable, and this job is not saved on this device yet.',
+        );
+        return;
+      }
+
+      setIsShowingCachedData(false);
       setLoadErrorMessage(getJobDetailErrorMessage(error));
     } finally {
       setIsInitialLoading(false);
     }
-  }, [authenticatedRequest, route.params.jobId]);
+  }, [authenticatedRequest, cacheAssignedJob, cacheOwner, route.params.jobId]);
 
   useEffect(() => {
     loadJob();
@@ -67,12 +127,18 @@ export function JobDetailScreen({ route }: Props) {
     setIsStartingJob(true);
     setActionMessage(null);
 
+    if (isShowingCachedData) {
+      setIsStartingJob(false);
+      return;
+    }
+
     try {
       const updatedJob = await startAssignedJob(
         authenticatedRequest,
-        route.params.jobId
+        route.params.jobId,
       );
       setJob(updatedJob);
+      await cacheAssignedJob(updatedJob);
     } catch (error) {
       setActionMessage(getJobDetailErrorMessage(error));
     } finally {
@@ -85,6 +151,7 @@ export function JobDetailScreen({ route }: Props) {
 
     if (
       !job ||
+      isShowingCachedData ||
       isCompletingJob ||
       !isCompleteJobActionAvailable(job.status) ||
       notes.length < COMPLETION_NOTES_MIN_LENGTH
@@ -99,11 +166,12 @@ export function JobDetailScreen({ route }: Props) {
       const updatedJob = await completeAssignedJob(
         authenticatedRequest,
         route.params.jobId,
-        { notes }
+        { notes },
       );
       setJob(updatedJob);
-      setCompletionNotes("");
-      setActionMessage("Job completed.");
+      await cacheAssignedJob(updatedJob);
+      setCompletionNotes('');
+      setActionMessage('Job completed.');
     } catch (error) {
       setActionMessage(getJobDetailErrorMessage(error));
     } finally {
@@ -131,7 +199,7 @@ export function JobDetailScreen({ route }: Props) {
         <View style={styles.centerState}>
           <Text style={styles.centerTitle}>Could not load job</Text>
           <Text style={styles.errorText}>
-            {loadErrorMessage ?? "This assigned job could not be found."}
+            {loadErrorMessage ?? 'This assigned job could not be found.'}
           </Text>
           <PrimaryButton
             label="Retry"
@@ -144,14 +212,17 @@ export function JobDetailScreen({ route }: Props) {
     );
   }
 
-  const canStartJob = isStartJobActionAvailable(job.status);
-  const canCompleteJob = isCompleteJobActionAvailable(job.status);
+  const canStartJob =
+    !isShowingCachedData && isStartJobActionAvailable(job.status);
+  const canCompleteJob =
+    !isShowingCachedData && isCompleteJobActionAvailable(job.status);
   const completionNotesTrimmed = completionNotes.trim();
   const isCompletionNotesValid =
     completionNotesTrimmed.length >= COMPLETION_NOTES_MIN_LENGTH;
   const isCompletionDisabled =
     !canCompleteJob ||
     !isCompletionNotesValid ||
+    isShowingCachedData ||
     isCompletingJob ||
     isStartingJob;
 
@@ -161,18 +232,30 @@ export function JobDetailScreen({ route }: Props) {
       <Text style={styles.title}>{job.title}</Text>
       <Text style={styles.identifier}>Job ID: {job.id}</Text>
 
+      {isShowingCachedData && (
+        <View style={styles.savedDataBanner}>
+          <Text style={styles.savedDataTitle}>Showing saved job details</Text>
+          <Text style={styles.savedDataText}>
+            Live data is unavailable. {formatLastSyncedAt(lastSyncedAt)}. This
+            saved view is read-only.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.summaryRow}>
         <Text style={styles.statusBadge}>{getJobStatusLabel(job.status)}</Text>
-        <Text style={styles.priorityBadge}>{getJobPriorityLabel(job.priority)}</Text>
+        <Text style={styles.priorityBadge}>
+          {getJobPriorityLabel(job.priority)}
+        </Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Job details</Text>
-        <DetailRow label="Site" value={job.siteAddress ?? "No site address"} />
+        <DetailRow label="Site" value={job.siteAddress ?? 'No site address'} />
         <DetailRow label="Due" value={formatJobDueDate(job.dueAt)} />
         <DetailRow
           label="Description"
-          value={job.description ?? "No description provided."}
+          value={job.description ?? 'No description provided.'}
         />
       </View>
 
@@ -191,14 +274,19 @@ export function JobDetailScreen({ route }: Props) {
 
       <View style={styles.actions}>
         <PrimaryButton
-          disabled={!canStartJob || isStartingJob || isCompletingJob}
-          label={isStartingJob ? "Starting job..." : "Start Job"}
+          disabled={
+            isShowingCachedData ||
+            !canStartJob ||
+            isStartingJob ||
+            isCompletingJob
+          }
+          label={isStartingJob ? 'Starting job...' : 'Start Job'}
           onPress={() => {
             handleStartJob();
           }}
         />
 
-        {job.status === "COMPLETED" ? (
+        {job.status === 'COMPLETED' ? (
           <View style={styles.completedCard}>
             <Text style={styles.completedTitle}>Job completed</Text>
             <Text style={styles.completedText}>
@@ -209,6 +297,7 @@ export function JobDetailScreen({ route }: Props) {
           <View style={styles.completionForm}>
             <Text style={styles.cardTitle}>Completion notes</Text>
             <TextInput
+              editable={!isShowingCachedData}
               multiline
               numberOfLines={4}
               onChangeText={setCompletionNotes}
@@ -220,7 +309,7 @@ export function JobDetailScreen({ route }: Props) {
             />
             <PrimaryButton
               disabled={isCompletionDisabled}
-              label={isCompletingJob ? "Completing job..." : "Complete Job"}
+              label={isCompletingJob ? 'Completing job...' : 'Complete Job'}
               variant="secondary"
               onPress={() => {
                 handleCompleteJob();
@@ -229,18 +318,26 @@ export function JobDetailScreen({ route }: Props) {
           </View>
         )}
 
-        {!canStartJob && job.status !== "COMPLETED" && (
+        {isShowingCachedData && (
+          <Text style={styles.mutedText}>
+            Saved job details are read-only until live data is available.
+          </Text>
+        )}
+
+        {!isShowingCachedData && !canStartJob && job.status !== 'COMPLETED' && (
           <Text style={styles.mutedText}>
             Start Job is available only while the backend allows this job to
             move into progress.
           </Text>
         )}
 
-        {!canCompleteJob && job.status !== "COMPLETED" && (
-          <Text style={styles.mutedText}>
-            Complete Job is available after the job is in progress.
-          </Text>
-        )}
+        {!isShowingCachedData &&
+          !canCompleteJob &&
+          job.status !== 'COMPLETED' && (
+            <Text style={styles.mutedText}>
+              Complete Job is available after the job is in progress.
+            </Text>
+          )}
 
         {actionMessage && (
           <View style={styles.actionMessage}>
@@ -263,7 +360,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function RequirementRow({
   label,
-  isRequired
+  isRequired,
 }: {
   label: string;
   isRequired: boolean;
@@ -272,7 +369,7 @@ function RequirementRow({
     <View style={styles.requirementRow}>
       <Text style={styles.rowValue}>{label}</Text>
       <Text style={isRequired ? styles.requiredBadge : styles.optionalBadge}>
-        {isRequired ? "Required" : "Not required"}
+        {isRequired ? 'Required' : 'Not required'}
       </Text>
     </View>
   );
@@ -283,51 +380,78 @@ function getJobDetailErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "Could not load this job. Please try again.";
+  return 'Could not load this job. Please try again.';
+}
+
+function getAssignedJobsCacheOwner(user: {
+  id: string;
+  organizationId: string;
+}): AssignedJobsCacheOwner {
+  return {
+    organizationId: user.organizationId,
+    userId: user.id,
+  };
 }
 
 const styles = StyleSheet.create({
   eyebrow: {
     color: colors.primary,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: '800',
     letterSpacing: 1,
-    textTransform: "uppercase"
+    textTransform: 'uppercase',
   },
   title: {
     marginTop: 8,
     color: colors.text,
     fontSize: 30,
-    fontWeight: "800",
-    lineHeight: 36
+    fontWeight: '800',
+    lineHeight: 36,
   },
   identifier: {
     marginTop: 10,
-    color: colors.muted
+    color: colors.muted,
+  },
+  savedDataBanner: {
+    gap: 6,
+    marginTop: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warningText,
+    borderRadius: 8,
+    backgroundColor: colors.warningBackground,
+    padding: 14,
+  },
+  savedDataTitle: {
+    color: colors.warningText,
+    fontWeight: '800',
+  },
+  savedDataText: {
+    color: colors.text,
+    lineHeight: 21,
   },
   summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
-    marginTop: 18
+    marginTop: 18,
   },
   statusBadge: {
-    overflow: "hidden",
+    overflow: 'hidden',
     borderRadius: 999,
     backgroundColor: colors.successBackground,
     paddingHorizontal: 10,
     paddingVertical: 6,
     color: colors.successText,
-    fontWeight: "800"
+    fontWeight: '800',
   },
   priorityBadge: {
-    overflow: "hidden",
+    overflow: 'hidden',
     borderRadius: 999,
-    backgroundColor: "#eef2f1",
+    backgroundColor: '#eef2f1',
     paddingHorizontal: 10,
     paddingVertical: 6,
     color: colors.text,
-    fontWeight: "800"
+    fontWeight: '800',
   },
   card: {
     gap: 14,
@@ -336,56 +460,56 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 12,
     backgroundColor: colors.surface,
-    padding: 18
+    padding: 18,
   },
   cardTitle: {
     color: colors.text,
     fontSize: 17,
-    fontWeight: "800"
+    fontWeight: '800',
   },
   detailRow: {
-    gap: 4
+    gap: 4,
   },
   rowLabel: {
     color: colors.muted,
     fontSize: 12,
-    fontWeight: "800",
-    textTransform: "uppercase"
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   rowValue: {
     color: colors.text,
     fontSize: 15,
-    lineHeight: 22
+    lineHeight: 22,
   },
   requirementRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
-    alignItems: "center",
-    justifyContent: "space-between"
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   requiredBadge: {
-    overflow: "hidden",
+    overflow: 'hidden',
     borderRadius: 999,
     backgroundColor: colors.warningBackground,
     paddingHorizontal: 9,
     paddingVertical: 5,
     color: colors.warningText,
     fontSize: 12,
-    fontWeight: "800"
+    fontWeight: '800',
   },
   optionalBadge: {
-    overflow: "hidden",
+    overflow: 'hidden',
     borderRadius: 999,
-    backgroundColor: "#eef2f1",
+    backgroundColor: '#eef2f1',
     paddingHorizontal: 9,
     paddingVertical: 5,
     color: colors.muted,
     fontSize: 12,
-    fontWeight: "800"
+    fontWeight: '800',
   },
   actions: {
     gap: 12,
-    marginTop: 24
+    marginTop: 24,
   },
   completionForm: {
     gap: 12,
@@ -393,19 +517,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 12,
     backgroundColor: colors.surface,
-    padding: 16
+    padding: 16,
   },
   notesInput: {
     minHeight: 112,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
-    backgroundColor: "#f8faf9",
+    backgroundColor: '#f8faf9',
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
     fontSize: 15,
-    lineHeight: 22
+    lineHeight: 22,
   },
   completedCard: {
     gap: 6,
@@ -413,53 +537,53 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.successText,
     borderRadius: 10,
     backgroundColor: colors.successBackground,
-    padding: 14
+    padding: 14,
   },
   completedTitle: {
     color: colors.successText,
     fontSize: 16,
-    fontWeight: "800"
+    fontWeight: '800',
   },
   completedText: {
     color: colors.text,
-    lineHeight: 21
+    lineHeight: 21,
   },
   mutedText: {
     color: colors.muted,
-    lineHeight: 21
+    lineHeight: 21,
   },
   actionMessage: {
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
     borderRadius: 8,
     backgroundColor: colors.surface,
-    padding: 14
+    padding: 14,
   },
   actionMessageText: {
     color: colors.text,
-    lineHeight: 21
+    lineHeight: 21,
   },
   centerState: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 12,
-    paddingVertical: 48
+    paddingVertical: 48,
   },
   centerTitle: {
     color: colors.text,
     fontSize: 20,
-    fontWeight: "800",
-    textAlign: "center"
+    fontWeight: '800',
+    textAlign: 'center',
   },
   centerText: {
     color: colors.muted,
     lineHeight: 22,
-    textAlign: "center"
+    textAlign: 'center',
   },
   errorText: {
     color: colors.errorText,
     lineHeight: 21,
-    textAlign: "center"
-  }
+    textAlign: 'center',
+  },
 });
