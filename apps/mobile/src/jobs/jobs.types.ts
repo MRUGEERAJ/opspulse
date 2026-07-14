@@ -49,3 +49,7 @@ export type AssignedJobsQuery = {
 export type UpdateJobStatusRequest = {
   status: WorkOrderStatus;
 };
+
+export type CompleteJobRequest = {
+  notes: string;
+};

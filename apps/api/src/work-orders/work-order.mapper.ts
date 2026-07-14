@@ -1,7 +1,24 @@
 import type { WorkOrder } from "../generated/prisma/client.js";
 import type { WorkOrderResponse } from "./work-orders.types.js";
 
-export function toWorkOrderResponse(workOrder: WorkOrder): WorkOrderResponse {
+type WorkOrderWithCurrentAssignment = WorkOrder & {
+  assignments?: Array<{
+    id: string;
+    assigneeId: string;
+    assignedAt: Date;
+    assignee: {
+      id: string;
+      email: string;
+      name: string;
+    };
+  }>;
+};
+
+export function toWorkOrderResponse(
+  workOrder: WorkOrderWithCurrentAssignment
+): WorkOrderResponse {
+  const currentAssignment = workOrder.assignments?.[0] ?? null;
+
   return {
     id: workOrder.id,
     organizationId: workOrder.organizationId,
@@ -19,6 +36,14 @@ export function toWorkOrderResponse(workOrder: WorkOrder): WorkOrderResponse {
     version: workOrder.version,
     createdById: workOrder.createdById,
     createdAt: workOrder.createdAt.toISOString(),
-    updatedAt: workOrder.updatedAt.toISOString()
+    updatedAt: workOrder.updatedAt.toISOString(),
+    currentAssignment: currentAssignment
+      ? {
+          id: currentAssignment.id,
+          assigneeId: currentAssignment.assigneeId,
+          assignedAt: currentAssignment.assignedAt.toISOString(),
+          assignee: currentAssignment.assignee
+        }
+      : null
   };
 }

@@ -42,6 +42,17 @@ export type WorkOrderAssignee = {
   isActive: boolean;
 };
 
+export type WorkOrderCurrentAssignment = {
+  id: string;
+  assigneeId: string;
+  assignedAt: string;
+  assignee: {
+    id: string;
+    email: string;
+    name: string;
+  };
+};
+
 export type UpdateWorkOrderStatusWriteData = {
   toStatus: WorkOrderStatus;
   actorUserId: string | null;
@@ -68,6 +79,7 @@ export type WorkOrderResponse = {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  currentAssignment: WorkOrderCurrentAssignment | null;
 };
 
 export type WorkOrderWithLocationInput = Pick<

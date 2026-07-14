@@ -6,6 +6,7 @@ import type {
   AssignedJobsResponse,
   AssignedJobsListMeta,
   AuthenticatedApiRequest,
+  CompleteJobRequest,
   UpdateJobStatusRequest
 } from "./jobs.types";
 
@@ -49,6 +50,17 @@ export function startAssignedJob(
   return request<AssignedJob>(apiPath(`/work-orders/${jobId}/status`), {
     method: "PATCH",
     body
+  });
+}
+
+export function completeAssignedJob(
+  request: AuthenticatedApiRequest,
+  jobId: string,
+  input: CompleteJobRequest
+): Promise<AssignedJob> {
+  return request<AssignedJob>(apiPath(`/work-orders/${jobId}/complete`), {
+    method: "PATCH",
+    body: input
   });
 }
 

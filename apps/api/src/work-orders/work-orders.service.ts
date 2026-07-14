@@ -14,6 +14,7 @@ import {
 } from "../generated/prisma/enums.js";
 import { AssignWorkOrderDto } from "./dto/assign-work-order.dto.js";
 import { CancelWorkOrderDto } from "./dto/cancel-work-order.dto.js";
+import { CompleteWorkOrderDto } from "./dto/complete-work-order.dto.js";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto.js";
 import { ListWorkOrdersQueryDto } from "./dto/list-work-orders-query.dto.js";
 import { UpdateWorkOrderStatusDto } from "./dto/update-work-order-status.dto.js";
@@ -167,6 +168,12 @@ export class WorkOrdersService {
       );
     }
 
+    if (getCurrentAssigneeId(workOrder) === assignee.id) {
+      throw new ConflictException(
+        "Work order is already assigned to this FieldAgent"
+      );
+    }
+
     const assigned = await this.workOrdersRepository.assign(
       actor,
       workOrder,
@@ -226,6 +233,19 @@ export class WorkOrdersService {
     return this.updateStatus(actor, id, {
       status: WorkOrderStatus.CANCELLED,
       reason: dto.reason
+    });
+  }
+
+  async complete(
+    actor: AuthenticatedActor,
+    id: string,
+    dto: CompleteWorkOrderDto
+  ) {
+    assertFieldAgent(actor);
+
+    return this.updateStatus(actor, id, {
+      status: WorkOrderStatus.COMPLETED,
+      reason: dto.notes
     });
   }
 
@@ -389,6 +409,14 @@ function assertFieldAgent(actor: AuthenticatedActor): void {
   if (actor.role !== UserRole.FIELD_AGENT) {
     throw new ForbiddenException("FieldAgent role is required");
   }
+}
+
+function getCurrentAssigneeId(workOrder: unknown): string | null {
+  const assignments = (
+    workOrder as { assignments?: Array<{ assigneeId: string }> }
+  ).assignments;
+
+  return assignments?.[0]?.assigneeId ?? null;
 }
 
 function auditActionForStatus(status: WorkOrderStatus): string {

@@ -25,6 +25,18 @@ export type WorkOrder = {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  currentAssignment: WorkOrderCurrentAssignment | null;
+};
+
+export type WorkOrderCurrentAssignment = {
+  id: string;
+  assigneeId: string;
+  assignedAt: string;
+  assignee: {
+    id: string;
+    email: string;
+    name: string;
+  };
 };
 
 export type WorkOrdersListMeta = {

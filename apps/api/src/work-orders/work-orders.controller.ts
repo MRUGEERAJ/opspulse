@@ -18,6 +18,7 @@ import { RolesGuard } from "../auth/guards/roles.guard.js";
 import { UserRole } from "../generated/prisma/enums.js";
 import { AssignWorkOrderDto } from "./dto/assign-work-order.dto.js";
 import { CancelWorkOrderDto } from "./dto/cancel-work-order.dto.js";
+import { CompleteWorkOrderDto } from "./dto/complete-work-order.dto.js";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto.js";
 import { ListWorkOrdersQueryDto } from "./dto/list-work-orders-query.dto.js";
 import { UpdateWorkOrderStatusDto } from "./dto/update-work-order-status.dto.js";
@@ -82,6 +83,16 @@ export class WorkOrdersController {
     @Body() dto: AssignWorkOrderDto
   ) {
     return this.workOrdersService.assign(actor, id, dto);
+  }
+
+  @Patch(":id/complete")
+  @Roles(UserRole.FIELD_AGENT)
+  complete(
+    @CurrentActor() actor: AuthenticatedActor,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @Body() dto: CompleteWorkOrderDto
+  ) {
+    return this.workOrdersService.complete(actor, id, dto);
   }
 
   @Patch(":id/status")

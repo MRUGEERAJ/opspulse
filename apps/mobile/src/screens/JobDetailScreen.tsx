@@ -1,14 +1,25 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
 
 import { useAuth } from "../auth/AuthContext";
-import { getAssignedJob, startAssignedJob } from "../jobs/jobs.api";
+import {
+  completeAssignedJob,
+  getAssignedJob,
+  startAssignedJob
+} from "../jobs/jobs.api";
 import type { AssignedJob } from "../jobs/jobs.types";
 import {
   formatJobDueDate,
   getJobPriorityLabel,
   getJobStatusLabel,
+  isCompleteJobActionAvailable,
   isStartJobActionAvailable
 } from "../jobs/jobs.utils";
 import type { RootStackParamList } from "../navigation/navigation.types";
@@ -19,14 +30,15 @@ import { colors } from "../shared/theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetail">;
 
-const COMPLETION_PLACEHOLDER_MESSAGE =
-  "Completion will be added with proof photo, location, QR scan, and offline sync.";
+const COMPLETION_NOTES_MIN_LENGTH = 3;
 
 export function JobDetailScreen({ route }: Props) {
   const { authenticatedRequest } = useAuth();
   const [job, setJob] = useState<AssignedJob | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isStartingJob, setIsStartingJob] = useState(false);
+  const [isCompletingJob, setIsCompletingJob] = useState(false);
+  const [completionNotes, setCompletionNotes] = useState("");
   const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -68,6 +80,37 @@ export function JobDetailScreen({ route }: Props) {
     }
   }
 
+  async function handleCompleteJob() {
+    const notes = completionNotes.trim();
+
+    if (
+      !job ||
+      isCompletingJob ||
+      !isCompleteJobActionAvailable(job.status) ||
+      notes.length < COMPLETION_NOTES_MIN_LENGTH
+    ) {
+      return;
+    }
+
+    setIsCompletingJob(true);
+    setActionMessage(null);
+
+    try {
+      const updatedJob = await completeAssignedJob(
+        authenticatedRequest,
+        route.params.jobId,
+        { notes }
+      );
+      setJob(updatedJob);
+      setCompletionNotes("");
+      setActionMessage("Job completed.");
+    } catch (error) {
+      setActionMessage(getJobDetailErrorMessage(error));
+    } finally {
+      setIsCompletingJob(false);
+    }
+  }
+
   if (isInitialLoading) {
     return (
       <Screen>
@@ -102,6 +145,15 @@ export function JobDetailScreen({ route }: Props) {
   }
 
   const canStartJob = isStartJobActionAvailable(job.status);
+  const canCompleteJob = isCompleteJobActionAvailable(job.status);
+  const completionNotesTrimmed = completionNotes.trim();
+  const isCompletionNotesValid =
+    completionNotesTrimmed.length >= COMPLETION_NOTES_MIN_LENGTH;
+  const isCompletionDisabled =
+    !canCompleteJob ||
+    !isCompletionNotesValid ||
+    isCompletingJob ||
+    isStartingJob;
 
   return (
     <Screen>
@@ -139,22 +191,54 @@ export function JobDetailScreen({ route }: Props) {
 
       <View style={styles.actions}>
         <PrimaryButton
-          disabled={!canStartJob || isStartingJob}
+          disabled={!canStartJob || isStartingJob || isCompletingJob}
           label={isStartingJob ? "Starting job..." : "Start Job"}
           onPress={() => {
             handleStartJob();
           }}
         />
-        <PrimaryButton
-          label="Complete Job"
-          variant="secondary"
-          onPress={() => setActionMessage(COMPLETION_PLACEHOLDER_MESSAGE)}
-        />
 
-        {!canStartJob && (
+        {job.status === "COMPLETED" ? (
+          <View style={styles.completedCard}>
+            <Text style={styles.completedTitle}>Job completed</Text>
+            <Text style={styles.completedText}>
+              The field agent has completed this work order.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.completionForm}>
+            <Text style={styles.cardTitle}>Completion notes</Text>
+            <TextInput
+              multiline
+              numberOfLines={4}
+              onChangeText={setCompletionNotes}
+              placeholder="What was completed?"
+              placeholderTextColor={colors.muted}
+              style={styles.notesInput}
+              textAlignVertical="top"
+              value={completionNotes}
+            />
+            <PrimaryButton
+              disabled={isCompletionDisabled}
+              label={isCompletingJob ? "Completing job..." : "Complete Job"}
+              variant="secondary"
+              onPress={() => {
+                handleCompleteJob();
+              }}
+            />
+          </View>
+        )}
+
+        {!canStartJob && job.status !== "COMPLETED" && (
           <Text style={styles.mutedText}>
             Start Job is available only while the backend allows this job to
             move into progress.
+          </Text>
+        )}
+
+        {!canCompleteJob && job.status !== "COMPLETED" && (
+          <Text style={styles.mutedText}>
+            Complete Job is available after the job is in progress.
           </Text>
         )}
 
@@ -302,6 +386,43 @@ const styles = StyleSheet.create({
   actions: {
     gap: 12,
     marginTop: 24
+  },
+  completionForm: {
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: 16
+  },
+  notesInput: {
+    minHeight: 112,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: "#f8faf9",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22
+  },
+  completedCard: {
+    gap: 6,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.successText,
+    borderRadius: 10,
+    backgroundColor: colors.successBackground,
+    padding: 14
+  },
+  completedTitle: {
+    color: colors.successText,
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  completedText: {
+    color: colors.text,
+    lineHeight: 21
   },
   mutedText: {
     color: colors.muted,

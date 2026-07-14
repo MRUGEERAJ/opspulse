@@ -16,6 +16,27 @@ import type {
   WorkOrderWriteData
 } from "./work-orders.types.js";
 
+const workOrderCurrentAssignmentInclude = {
+  assignments: {
+    where: {
+      unassignedAt: null
+    },
+    orderBy: {
+      assignedAt: "desc"
+    },
+    take: 1,
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          email: true,
+          name: true
+        }
+      }
+    }
+  }
+} satisfies Prisma.WorkOrderInclude;
+
 @Injectable()
 export class WorkOrdersRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -63,7 +84,9 @@ export class WorkOrdersRepository {
     });
   }
 
-  async list(input: ListWorkOrdersInput) {
+  async list(
+    input: ListWorkOrdersInput
+  ): Promise<{ data: WorkOrder[]; total: number }> {
     const where: Prisma.WorkOrderWhereInput = {
       organizationId: input.organizationId,
       ...(input.status ? { status: input.status } : {}),
@@ -75,6 +98,7 @@ export class WorkOrdersRepository {
       this.prismaService.workOrder.count({ where }),
       this.prismaService.workOrder.findMany({
         where,
+        include: workOrderCurrentAssignmentInclude,
         skip: (input.page - 1) * input.limit,
         take: input.limit,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }]
@@ -84,7 +108,9 @@ export class WorkOrdersRepository {
     return { data, total };
   }
 
-  async listAssignedToAssignee(input: ListAssignedWorkOrdersInput) {
+  async listAssignedToAssignee(
+    input: ListAssignedWorkOrdersInput
+  ): Promise<{ data: WorkOrder[]; total: number }> {
     const where: Prisma.WorkOrderWhereInput = {
       organizationId: input.organizationId,
       ...(input.status ? { status: input.status } : {}),
@@ -102,6 +128,7 @@ export class WorkOrdersRepository {
       this.prismaService.workOrder.count({ where }),
       this.prismaService.workOrder.findMany({
         where,
+        include: workOrderCurrentAssignmentInclude,
         skip: (input.page - 1) * input.limit,
         take: input.limit,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }]
@@ -116,7 +143,8 @@ export class WorkOrdersRepository {
       where: {
         id,
         organizationId
-      }
+      },
+      include: workOrderCurrentAssignmentInclude
     });
   }
 
@@ -135,7 +163,8 @@ export class WorkOrdersRepository {
             unassignedAt: null
           }
         }
-      }
+      },
+      include: workOrderCurrentAssignmentInclude
     });
   }
 
@@ -265,7 +294,8 @@ export class WorkOrdersRepository {
       return transaction.workOrder.findUnique({
         where: {
           id: workOrder.id
-        }
+        },
+        include: workOrderCurrentAssignmentInclude
       });
     });
   }

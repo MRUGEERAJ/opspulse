@@ -124,7 +124,8 @@ code {
   font-weight: 700;
 }
 
-.form-field input {
+.form-field input,
+.form-field select {
   width: 100%;
   min-height: 44px;
   border: 1px solid #cbd8d4;
@@ -134,7 +135,8 @@ code {
   color: #17212b;
 }
 
-.form-field input:focus {
+.form-field input:focus,
+.form-field select:focus {
   border-color: #0f7660;
   outline: 3px solid #d9f2eb;
 }
@@ -400,6 +402,61 @@ code {
   line-height: 1.65;
 }
 
+.assignment-card {
+  display: grid;
+  gap: 18px;
+}
+
+.assignment-form {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.current-assignment {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d8e1de;
+  border-radius: 8px;
+  background: #f8faf9;
+  padding: 14px;
+}
+
+.current-assignment span,
+.current-assignment small,
+.inline-note {
+  color: #596a66;
+  font-size: 0.88rem;
+}
+
+.current-assignment strong {
+  color: #17212b;
+}
+
+.completion-notice {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 24px;
+  border-left: 4px solid #0b654f;
+  border-radius: 8px;
+  background: #dcf5eb;
+  padding: 16px 18px;
+}
+
+.completion-notice h3,
+.completion-notice p {
+  margin: 0;
+}
+
+.completion-notice h3 {
+  color: #0b654f;
+}
+
+.completion-notice p {
+  color: #17212b;
+}
+
 @media (max-width: 900px) {
   .control-tower {
     grid-template-columns: 1fr;
@@ -451,6 +508,10 @@ code {
   }
 
   .table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-form {
     grid-template-columns: 1fr;
   }
 }

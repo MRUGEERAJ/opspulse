@@ -51,7 +51,11 @@ export function WorkOrderDetailPage() {
         if (isActive) {
           setWorkOrder(nextWorkOrder);
           setFieldAgents(nextFieldAgents);
-          setAssigneeId(nextFieldAgents[0]?.id ?? "");
+          setAssigneeId(
+            nextWorkOrder.currentAssignment?.assigneeId ??
+              nextFieldAgents[0]?.id ??
+              "",
+          );
         }
       } catch (error) {
         if (isActive) {
@@ -80,7 +84,11 @@ export function WorkOrderDetailPage() {
   async function handleAssign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!workOrder || !assigneeId) {
+    if (
+      !workOrder ||
+      !assigneeId ||
+      workOrder.currentAssignment?.assigneeId === assigneeId
+    ) {
       return;
     }
 
@@ -94,7 +102,11 @@ export function WorkOrderDetailPage() {
         assigneeId,
       );
       setWorkOrder(updated);
-      setAssignMessage("Work order assigned.");
+      setAssignMessage(
+        workOrder.currentAssignment
+          ? "Work order reassigned."
+          : "Work order assigned.",
+      );
     } catch (error) {
       setAssignMessage(
         error instanceof ApiError
@@ -105,6 +117,21 @@ export function WorkOrderDetailPage() {
       setIsAssigning(false);
     }
   }
+
+  const isSameAssigneeSelected =
+    Boolean(assigneeId) &&
+    workOrder?.currentAssignment?.assigneeId === assigneeId;
+  const canSubmitAssignment =
+    Boolean(assigneeId) &&
+    Boolean(workOrder && ASSIGNABLE_STATUSES.has(workOrder.status)) &&
+    !isSameAssigneeSelected;
+  const assignmentButtonLabel = isAssigning
+    ? "Assigning..."
+    : isSameAssigneeSelected
+      ? "Assigned"
+      : workOrder?.currentAssignment
+        ? "Reassign"
+        : "Assign";
 
   return (
     <>
@@ -137,6 +164,13 @@ export function WorkOrderDetailPage() {
               {formatEnumLabel(workOrder.status)}
             </span>
           </section>
+
+          {workOrder.status === "COMPLETED" ? (
+            <section className="completion-notice" role="status">
+              <h3>Job completed</h3>
+              <p>The field agent has completed this work order.</p>
+            </section>
+          ) : null}
 
           <section className="detail-grid">
             <article className="content-card detail-card">
@@ -184,10 +218,22 @@ export function WorkOrderDetailPage() {
           {canAssign ? (
             <section className="content-card assignment-card">
               <h3>Assign work order</h3>
-              <p>
-                Managers can assign organization work orders in this v1 flow;
-                team scoping will come when team ownership exists.
-              </p>
+              <div className="current-assignment">
+                <span>Current assignment</span>
+                {workOrder.currentAssignment ? (
+                  <strong>
+                    {workOrder.currentAssignment.assignee.name} (
+                    {workOrder.currentAssignment.assignee.email})
+                  </strong>
+                ) : (
+                  <strong>Unassigned</strong>
+                )}
+                {workOrder.currentAssignment ? (
+                  <small>
+                    Assigned {formatDate(workOrder.currentAssignment.assignedAt)}
+                  </small>
+                ) : null}
+              </div>
               <form className="assignment-form" onSubmit={handleAssign}>
                 <label className="form-field">
                   <span>FieldAgent</span>
@@ -205,6 +251,9 @@ export function WorkOrderDetailPage() {
                       fieldAgents.map((agent) => (
                         <option key={agent.id} value={agent.id}>
                           {agent.name} ({agent.email})
+                          {agent.id === workOrder.currentAssignment?.assigneeId
+                            ? " - assigned"
+                            : ""}
                         </option>
                       ))
                     )}
@@ -214,14 +263,18 @@ export function WorkOrderDetailPage() {
                   className="button button-primary"
                   disabled={
                     isAssigning ||
-                    !assigneeId ||
-                    !ASSIGNABLE_STATUSES.has(workOrder.status)
+                    !canSubmitAssignment
                   }
                   type="submit"
                 >
-                  {isAssigning ? "Assigning..." : "Assign"}
+                  {assignmentButtonLabel}
                 </button>
               </form>
+              {isSameAssigneeSelected ? (
+                <p className="inline-note">
+                  This FieldAgent is already assigned to this work order.
+                </p>
+              ) : null}
               {!ASSIGNABLE_STATUSES.has(workOrder.status) ? (
                 <p className="inline-note">
                   This status cannot be reassigned through the current workflow.

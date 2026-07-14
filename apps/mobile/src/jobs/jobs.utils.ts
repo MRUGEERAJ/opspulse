@@ -51,3 +51,7 @@ export function formatJobDueDate(dueAt: string | null): string {
 export function isStartJobActionAvailable(status: WorkOrderStatus): boolean {
   return status === "ASSIGNED" || status === "SLA_BREACHED";
 }
+
+export function isCompleteJobActionAvailable(status: WorkOrderStatus): boolean {
+  return status === "IN_PROGRESS" || status === "SLA_BREACHED";
+}

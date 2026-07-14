@@ -75,6 +75,33 @@ test("admin can assign a work order to an active FieldAgent", async () => {
   assert.equal(result.status, WorkOrderStatus.ASSIGNED);
 });
 
+test("assigning the current FieldAgent again is rejected", async () => {
+  let assignWasCalled = false;
+  const repository = createRepository({
+    findById: async () =>
+      createWorkOrderWithCurrentAssignment(WorkOrderStatus.ASSIGNED, agentId),
+    findAssigneeById: async () => ({
+      id: agentId,
+      organizationId,
+      role: UserRole.FIELD_AGENT,
+      isActive: true
+    }),
+    assign: async () => {
+      assignWasCalled = true;
+      return createWorkOrder(WorkOrderStatus.ASSIGNED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.assign(adminActor(), workOrderId, {
+      assigneeId: agentId
+    }),
+    (error: unknown) => error instanceof ConflictException
+  );
+  assert.equal(assignWasCalled, false);
+});
+
 test("manager cannot assign a work order to a non-FieldAgent user", async () => {
   const repository = createRepository({
     findById: async () => createWorkOrder(WorkOrderStatus.CREATED),
@@ -185,19 +212,57 @@ test("assigned FieldAgent can start their assigned work order", async () => {
 });
 
 test("assigned FieldAgent can complete an in-progress work order", async () => {
+  let previousStatus: WorkOrderStatus | undefined;
+  let statusUpdate: UpdateWorkOrderStatusWriteData | undefined;
   const repository = createRepository({
     findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS),
     findAssignedToAssigneeById: async () =>
       createWorkOrder(WorkOrderStatus.IN_PROGRESS),
-    updateStatus: async () => createWorkOrder(WorkOrderStatus.COMPLETED)
+    updateStatus: async (_workOrder, data) => {
+      previousStatus = _workOrder.status;
+      statusUpdate = data;
+      return createWorkOrder(WorkOrderStatus.COMPLETED);
+    }
   });
   const service = new WorkOrdersService(repository);
 
-  const result = await service.updateStatus(fieldAgentActor(), workOrderId, {
-    status: WorkOrderStatus.COMPLETED
+  const result = await service.complete(fieldAgentActor(), workOrderId, {
+    notes: "Completed generator inspection."
   });
 
   assert.equal(result.status, WorkOrderStatus.COMPLETED);
+  assert.equal(previousStatus, WorkOrderStatus.IN_PROGRESS);
+  assert.equal(statusUpdate?.toStatus, WorkOrderStatus.COMPLETED);
+  assert.equal(statusUpdate?.actorUserId, agentId);
+  assert.equal(statusUpdate?.source, StatusChangeSource.API);
+  assert.equal(statusUpdate?.reason, "Completed generator inspection.");
+  assert.equal(statusUpdate?.auditAction, "WORK_ORDER_COMPLETED");
+});
+
+test("assigned FieldAgent can complete an SLA-breached work order", async () => {
+  let previousStatus: WorkOrderStatus | undefined;
+  let statusUpdate: UpdateWorkOrderStatusWriteData | undefined;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.SLA_BREACHED),
+    findAssignedToAssigneeById: async () =>
+      createWorkOrder(WorkOrderStatus.SLA_BREACHED),
+    updateStatus: async (_workOrder, data) => {
+      previousStatus = _workOrder.status;
+      statusUpdate = data;
+      return createWorkOrder(WorkOrderStatus.COMPLETED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.complete(fieldAgentActor(), workOrderId, {
+    notes: "Completed after SLA breach."
+  });
+
+  assert.equal(result.status, WorkOrderStatus.COMPLETED);
+  assert.equal(previousStatus, WorkOrderStatus.SLA_BREACHED);
+  assert.equal(statusUpdate?.toStatus, WorkOrderStatus.COMPLETED);
+  assert.equal(statusUpdate?.reason, "Completed after SLA breach.");
+  assert.equal(statusUpdate?.auditAction, "WORK_ORDER_COMPLETED");
 });
 
 test("FieldAgent must provide a reason when marking work order failed", async () => {
@@ -287,8 +352,8 @@ test("invalid lifecycle jump returns conflict", async () => {
   const service = new WorkOrdersService(repository);
 
   await assert.rejects(
-    service.updateStatus(fieldAgentActor(), workOrderId, {
-      status: WorkOrderStatus.COMPLETED
+    service.complete(fieldAgentActor(), workOrderId, {
+      notes: "Completed generator inspection."
     }),
     (error: unknown) => error instanceof ConflictException
   );
@@ -306,6 +371,35 @@ test("FieldAgent cannot update another agent's work order status", async () => {
       status: WorkOrderStatus.IN_PROGRESS
     }),
     (error: unknown) => error instanceof ForbiddenException
+  );
+});
+
+test("FieldAgent cannot complete another agent's work order", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS),
+    findAssignedToAssigneeById: async () => null
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.complete(fieldAgentActor(), workOrderId, {
+      notes: "Completed generator inspection."
+    }),
+    (error: unknown) => error instanceof ForbiddenException
+  );
+});
+
+test("completed work orders cannot be completed again", async () => {
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.COMPLETED)
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.complete(fieldAgentActor(), workOrderId, {
+      notes: "Completed generator inspection."
+    }),
+    (error: unknown) => error instanceof ConflictException
   );
 });
 
@@ -382,5 +476,26 @@ function createWorkOrder(status: WorkOrderStatus): WorkOrder {
     createdById: "20000000-0000-4000-8000-000000000001",
     createdAt: new Date("2026-06-24T00:00:00.000Z"),
     updatedAt: new Date("2026-06-24T00:00:00.000Z")
+  } as WorkOrder;
+}
+
+function createWorkOrderWithCurrentAssignment(
+  status: WorkOrderStatus,
+  assigneeId: string
+): WorkOrder {
+  return {
+    ...createWorkOrder(status),
+    assignments: [
+      {
+        id: "40000000-0000-4000-8000-000000000001",
+        assigneeId,
+        assignedAt: new Date("2026-06-24T01:00:00.000Z"),
+        assignee: {
+          id: assigneeId,
+          email: "field@opspulse.local",
+          name: "Field Agent"
+        }
+      }
+    ]
   } as WorkOrder;
 }
