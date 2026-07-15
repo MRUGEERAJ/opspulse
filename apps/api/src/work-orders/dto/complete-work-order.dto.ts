@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsString, Length } from "class-validator";
+import { IsOptional, IsString, Length } from "class-validator";
 
 import { trimString } from "./work-order-dto.transforms.js";
 
@@ -8,4 +8,10 @@ export class CompleteWorkOrderDto {
   @IsString()
   @Length(3, 500)
   notes!: string;
+
+  @Transform(trimString)
+  @IsOptional()
+  @IsString()
+  @Length(8, 120)
+  clientActionId?: string;
 }

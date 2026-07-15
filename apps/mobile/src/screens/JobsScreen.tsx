@@ -35,6 +35,7 @@ import type {
 import { ApiError } from '../shared/api/api-client';
 import { PrimaryButton } from '../shared/components/PrimaryButton';
 import { colors } from '../shared/theme';
+import { useSyncQueue } from '../sync-queue/SyncQueueContext';
 
 type JobsNavigation = CompositeNavigationProp<
   BottomTabNavigationProp<AppTabParamList, 'Jobs'>,
@@ -47,6 +48,7 @@ const PAGE_SIZE = 20;
 export function JobsScreen() {
   const navigation = useNavigation<JobsNavigation>();
   const { authenticatedRequest, session } = useAuth();
+  const { getQueuedCompletionForJob } = useSyncQueue();
   const hasLoadedOnceRef = useRef(false);
   const [jobs, setJobs] = useState<AssignedJob[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -202,6 +204,7 @@ export function JobsScreen() {
         renderItem={({ item }) => (
           <JobCard
             job={item}
+            hasPendingSync={getQueuedCompletionForJob(item.id) !== null}
             onPress={() =>
               navigation.navigate('JobDetail', {
                 jobId: item.id,
@@ -268,7 +271,15 @@ function JobsHeader({
   );
 }
 
-function JobCard({ job, onPress }: { job: AssignedJob; onPress: () => void }) {
+function JobCard({
+  job,
+  hasPendingSync,
+  onPress,
+}: {
+  job: AssignedJob;
+  hasPendingSync: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -282,6 +293,9 @@ function JobCard({ job, onPress }: { job: AssignedJob; onPress: () => void }) {
 
       <View style={styles.badgeRow}>
         <Text style={styles.statusBadge}>{getJobStatusLabel(job.status)}</Text>
+        {hasPendingSync && (
+          <Text style={styles.pendingSyncBadge}>Pending sync</Text>
+        )}
       </View>
 
       <View style={styles.cardMeta}>
@@ -439,6 +453,8 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   statusBadge: {
     overflow: 'hidden',
@@ -447,6 +463,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     color: colors.successText,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  pendingSyncBadge: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: colors.warningBackground,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    color: colors.warningText,
     fontSize: 12,
     fontWeight: '800',
   },

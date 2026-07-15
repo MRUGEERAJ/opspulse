@@ -61,4 +61,5 @@ export type UpdateJobStatusRequest = {
 
 export type CompleteJobRequest = {
   notes: string;
+  clientActionId?: string;
 };

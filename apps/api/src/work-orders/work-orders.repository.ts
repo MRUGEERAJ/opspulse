@@ -186,6 +186,31 @@ export class WorkOrdersRepository {
     });
   }
 
+  async hasCompletedClientAction(input: {
+    organizationId: string;
+    actorUserId: string;
+    workOrderId: string;
+    clientActionId: string;
+  }): Promise<boolean> {
+    const existingAuditLog = await this.prismaService.auditLog.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        workOrderId: input.workOrderId,
+        action: "WORK_ORDER_COMPLETED",
+        metadata: {
+          path: ["clientActionId"],
+          equals: input.clientActionId
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    return existingAuditLog !== null;
+  }
+
   async update(
     workOrder: WorkOrder,
     data: WorkOrderWriteData
@@ -348,6 +373,9 @@ export class WorkOrdersRepository {
             fromStatus: workOrder.status,
             toStatus: data.toStatus,
             source: data.source,
+            ...(data.clientActionId
+              ? { clientActionId: data.clientActionId }
+              : {}),
             ...(data.reason ? { reason: data.reason } : {})
           }
         }

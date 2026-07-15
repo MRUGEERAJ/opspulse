@@ -265,6 +265,52 @@ test("assigned FieldAgent can complete an SLA-breached work order", async () => 
   assert.equal(statusUpdate?.auditAction, "WORK_ORDER_COMPLETED");
 });
 
+test("offline completion stores client action metadata", async () => {
+  let statusUpdate: UpdateWorkOrderStatusWriteData | undefined;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS),
+    findAssignedToAssigneeById: async () =>
+      createWorkOrder(WorkOrderStatus.IN_PROGRESS),
+    updateStatus: async (_workOrder, data) => {
+      statusUpdate = data;
+      return createWorkOrder(WorkOrderStatus.COMPLETED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.complete(fieldAgentActor(), workOrderId, {
+    notes: "Completed generator inspection.",
+    clientActionId: "complete-offline-001"
+  });
+
+  assert.equal(result.status, WorkOrderStatus.COMPLETED);
+  assert.equal(statusUpdate?.toStatus, WorkOrderStatus.COMPLETED);
+  assert.equal(statusUpdate?.source, StatusChangeSource.OFFLINE_SYNC);
+  assert.equal(statusUpdate?.clientActionId, "complete-offline-001");
+  assert.equal(statusUpdate?.auditAction, "WORK_ORDER_COMPLETED");
+});
+
+test("retrying a completed offline action returns the current work order", async () => {
+  let updateWasCalled = false;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.COMPLETED),
+    hasCompletedClientAction: async () => true,
+    updateStatus: async () => {
+      updateWasCalled = true;
+      return createWorkOrder(WorkOrderStatus.COMPLETED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.complete(fieldAgentActor(), workOrderId, {
+    notes: "Completed generator inspection.",
+    clientActionId: "complete-offline-001"
+  });
+
+  assert.equal(result.status, WorkOrderStatus.COMPLETED);
+  assert.equal(updateWasCalled, false);
+});
+
 test("FieldAgent must provide a reason when marking work order failed", async () => {
   const repository = createRepository({
     findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS)
@@ -429,6 +475,7 @@ function createRepository(
     findAssigneeById: async () => null,
     assign: async () => null,
     updateStatus: async () => null,
+    hasCompletedClientAction: async () => false,
     listAssignedToAssignee: async () => ({ data: [], total: 0 }),
     findAssignedToAssigneeById: async () => null,
     ...overrides

@@ -243,16 +243,33 @@ export class WorkOrdersService {
   ) {
     assertFieldAgent(actor);
 
+    if (dto.clientActionId) {
+      const workOrder = await this.findOrThrow(actor.organizationId, id);
+
+      if (
+        workOrder.status === WorkOrderStatus.COMPLETED &&
+        (await this.workOrdersRepository.hasCompletedClientAction({
+          organizationId: actor.organizationId,
+          actorUserId: actor.userId,
+          workOrderId: id,
+          clientActionId: dto.clientActionId
+        }))
+      ) {
+        return toWorkOrderResponse(workOrder);
+      }
+    }
+
     return this.updateStatus(actor, id, {
       status: WorkOrderStatus.COMPLETED,
-      reason: dto.notes
+      reason: dto.notes,
+      clientActionId: dto.clientActionId
     });
   }
 
   async updateStatus(
     actor: AuthenticatedActor,
     id: string,
-    dto: UpdateWorkOrderStatusDto
+    dto: UpdateWorkOrderStatusDto & { clientActionId?: string }
   ) {
     const workOrder = await this.findOrThrow(actor.organizationId, id);
 
@@ -269,9 +286,12 @@ export class WorkOrdersService {
     const updated = await this.workOrdersRepository.updateStatus(workOrder, {
       toStatus: dto.status,
       actorUserId: actor.userId,
-      source: StatusChangeSource.API,
+      source: dto.clientActionId
+        ? StatusChangeSource.OFFLINE_SYNC
+        : StatusChangeSource.API,
       reason: dto.reason,
-      auditAction: auditActionForStatus(dto.status)
+      auditAction: auditActionForStatus(dto.status),
+      clientActionId: dto.clientActionId
     });
 
     if (!updated) {

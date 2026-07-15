@@ -1,10 +1,12 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import type { PropsWithChildren } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "../auth/AuthContext";
 import { JobDetailScreen } from "../screens/JobDetailScreen";
 import { LoginScreen } from "../screens/LoginScreen";
 import { colors } from "../shared/theme";
+import { SyncQueueProvider } from "../sync-queue/SyncQueueContext";
 import { AppTabs } from "./AppTabs";
 import type { RootStackParamList } from "./navigation.types";
 
@@ -17,6 +19,48 @@ export function RootNavigator() {
     return <SessionRestoreScreen />;
   }
 
+  return status === "authenticated" ? (
+    <AuthenticatedStack />
+  ) : (
+    <AnonymousStack />
+  );
+}
+
+function AuthenticatedStack() {
+  return (
+    <SyncQueueBoundary>
+      <Stack.Navigator
+        screenOptions={{
+          contentStyle: {
+            backgroundColor: "#f4f7f6"
+          },
+          headerStyle: {
+            backgroundColor: "#f4f7f6"
+          },
+          headerShadowVisible: false,
+          headerTintColor: "#0f7660"
+        }}
+      >
+        <Stack.Screen
+          name="App"
+          component={AppTabs}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="JobDetail"
+          component={JobDetailScreen}
+          options={({ route }) => ({ title: route.params.title })}
+        />
+      </Stack.Navigator>
+    </SyncQueueBoundary>
+  );
+}
+
+function SyncQueueBoundary({ children }: PropsWithChildren) {
+  return <SyncQueueProvider>{children}</SyncQueueProvider>;
+}
+
+function AnonymousStack() {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -30,26 +74,11 @@ export function RootNavigator() {
         headerTintColor: "#0f7660"
       }}
     >
-      {status === "authenticated" ? (
-        <>
-          <Stack.Screen
-            name="App"
-            component={AppTabs}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="JobDetail"
-            component={JobDetailScreen}
-            options={({ route }) => ({ title: route.params.title })}
-          />
-        </>
-      ) : (
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-      )}
+      <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }

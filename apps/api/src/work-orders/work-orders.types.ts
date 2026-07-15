@@ -59,6 +59,7 @@ export type UpdateWorkOrderStatusWriteData = {
   source: StatusChangeSource;
   reason?: string;
   auditAction: string;
+  clientActionId?: string;
 };
 
 export type WorkOrderResponse = {

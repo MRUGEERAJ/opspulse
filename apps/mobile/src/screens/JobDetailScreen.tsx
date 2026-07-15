@@ -33,6 +33,11 @@ import { ApiError } from '../shared/api/api-client';
 import { PrimaryButton } from '../shared/components/PrimaryButton';
 import { Screen } from '../shared/components/Screen';
 import { colors } from '../shared/theme';
+import { useSyncQueue } from '../sync-queue/SyncQueueContext';
+import {
+  createClientActionId,
+  isRetryableSyncError,
+} from '../sync-queue/sync-queue.utils';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'JobDetail'>;
 
@@ -40,6 +45,7 @@ const COMPLETION_NOTES_MIN_LENGTH = 3;
 
 export function JobDetailScreen({ route }: Props) {
   const { authenticatedRequest, session } = useAuth();
+  const { enqueueCompleteJob, getQueuedCompletionForJob } = useSyncQueue();
   const [job, setJob] = useState<AssignedJob | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isStartingJob, setIsStartingJob] = useState(false);
@@ -53,6 +59,7 @@ export function JobDetailScreen({ route }: Props) {
     () => (session ? getAssignedJobsCacheOwner(session.user) : null),
     [session],
   );
+  const queuedCompletion = job ? getQueuedCompletionForJob(job.id) : null;
 
   const cacheAssignedJob = useCallback(
     async (nextJob: AssignedJob) => {
@@ -151,8 +158,8 @@ export function JobDetailScreen({ route }: Props) {
 
     if (
       !job ||
-      isShowingCachedData ||
       isCompletingJob ||
+      queuedCompletion ||
       !isCompleteJobActionAvailable(job.status) ||
       notes.length < COMPLETION_NOTES_MIN_LENGTH
     ) {
@@ -161,22 +168,53 @@ export function JobDetailScreen({ route }: Props) {
 
     setIsCompletingJob(true);
     setActionMessage(null);
+    const clientActionId = createClientActionId();
+
+    if (isShowingCachedData) {
+      try {
+        await queueCompletion(notes, clientActionId);
+      } catch (error) {
+        setActionMessage(getJobDetailErrorMessage(error));
+      }
+      setIsCompletingJob(false);
+      return;
+    }
 
     try {
       const updatedJob = await completeAssignedJob(
         authenticatedRequest,
         route.params.jobId,
-        { notes },
+        { notes, clientActionId },
       );
       setJob(updatedJob);
       await cacheAssignedJob(updatedJob);
       setCompletionNotes('');
       setActionMessage('Job completed.');
     } catch (error) {
+      if (isRetryableSyncError(error)) {
+        await queueCompletion(notes, clientActionId);
+        return;
+      }
+
       setActionMessage(getJobDetailErrorMessage(error));
     } finally {
       setIsCompletingJob(false);
     }
+  }
+
+  async function queueCompletion(notes: string, clientActionId: string) {
+    const result = await enqueueCompleteJob({
+      jobId: route.params.jobId,
+      notes,
+      clientActionId,
+    });
+
+    setCompletionNotes('');
+    setActionMessage(
+      result.wasCreated
+        ? 'Completion queued. It will sync when the API is reachable.'
+        : 'Completion is already queued for this job.',
+    );
   }
 
   if (isInitialLoading) {
@@ -214,15 +252,14 @@ export function JobDetailScreen({ route }: Props) {
 
   const canStartJob =
     !isShowingCachedData && isStartJobActionAvailable(job.status);
-  const canCompleteJob =
-    !isShowingCachedData && isCompleteJobActionAvailable(job.status);
+  const canCompleteJob = isCompleteJobActionAvailable(job.status);
   const completionNotesTrimmed = completionNotes.trim();
   const isCompletionNotesValid =
     completionNotesTrimmed.length >= COMPLETION_NOTES_MIN_LENGTH;
   const isCompletionDisabled =
     !canCompleteJob ||
     !isCompletionNotesValid ||
-    isShowingCachedData ||
+    queuedCompletion !== null ||
     isCompletingJob ||
     isStartingJob;
 
@@ -237,7 +274,21 @@ export function JobDetailScreen({ route }: Props) {
           <Text style={styles.savedDataTitle}>Showing saved job details</Text>
           <Text style={styles.savedDataText}>
             Live data is unavailable. {formatLastSyncedAt(lastSyncedAt)}. This
-            saved view is read-only.
+            saved view can queue completion, then sync it later.
+          </Text>
+        </View>
+      )}
+
+      {queuedCompletion && (
+        <View style={styles.syncBanner}>
+          <Text style={styles.syncTitle}>
+            {getQueuedCompletionTitle(queuedCompletion.status)}
+          </Text>
+          <Text style={styles.syncText}>
+            Attempts: {queuedCompletion.attemptCount}
+            {queuedCompletion.lastError
+              ? `. Last error: ${queuedCompletion.lastError}`
+              : ''}
           </Text>
         </View>
       )}
@@ -297,7 +348,7 @@ export function JobDetailScreen({ route }: Props) {
           <View style={styles.completionForm}>
             <Text style={styles.cardTitle}>Completion notes</Text>
             <TextInput
-              editable={!isShowingCachedData}
+              editable={!queuedCompletion}
               multiline
               numberOfLines={4}
               onChangeText={setCompletionNotes}
@@ -309,7 +360,13 @@ export function JobDetailScreen({ route }: Props) {
             />
             <PrimaryButton
               disabled={isCompletionDisabled}
-              label={isCompletingJob ? 'Completing job...' : 'Complete Job'}
+              label={
+                queuedCompletion
+                  ? 'Completion Queued'
+                  : isCompletingJob
+                    ? 'Completing job...'
+                    : 'Complete Job'
+              }
               variant="secondary"
               onPress={() => {
                 handleCompleteJob();
@@ -318,9 +375,10 @@ export function JobDetailScreen({ route }: Props) {
           </View>
         )}
 
-        {isShowingCachedData && (
+        {isShowingCachedData && !queuedCompletion && canCompleteJob && (
           <Text style={styles.mutedText}>
-            Saved job details are read-only until live data is available.
+            Live data is unavailable. Completing now will save a local action
+            and sync it later.
           </Text>
         )}
 
@@ -347,6 +405,17 @@ export function JobDetailScreen({ route }: Props) {
       </View>
     </Screen>
   );
+}
+
+function getQueuedCompletionTitle(status: string): string {
+  switch (status) {
+    case 'SYNCING':
+      return 'Completion syncing';
+    case 'FAILED':
+      return 'Completion sync failed';
+    default:
+      return 'Completion queued';
+  }
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -426,6 +495,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   savedDataText: {
+    color: colors.text,
+    lineHeight: 21,
+  },
+  syncBanner: {
+    gap: 6,
+    marginTop: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    padding: 14,
+  },
+  syncTitle: {
+    color: colors.primary,
+    fontWeight: '800',
+  },
+  syncText: {
     color: colors.text,
     lineHeight: 21,
   },
