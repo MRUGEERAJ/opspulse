@@ -9,12 +9,19 @@ export type SyncActionType = 'COMPLETE_JOB';
 
 export type SyncQueueItemStatus =
   | 'PENDING'
-  | 'SYNCING'
+  | 'PROCESSING'
   | 'SYNCED'
   | 'FAILED';
 
+export type SyncFailureKind =
+  | 'RETRYABLE'
+  | 'CONFLICT'
+  | 'VALIDATION'
+  | 'FORBIDDEN';
+
 export type CompleteJobSyncPayload = {
   notes: string;
+  expectedVersion?: number;
 };
 
 export type CompleteJobSyncQueueItem = {
@@ -27,6 +34,7 @@ export type CompleteJobSyncQueueItem = {
   createdAtOnDevice: string;
   attemptCount: number;
   status: SyncQueueItemStatus;
+  failureKind: SyncFailureKind | null;
   lastError: string | null;
   lastAttemptedAt: string | null;
   syncedAt: string | null;
@@ -44,6 +52,7 @@ export type PersistedSyncQueue = {
 export type EnqueueCompleteJobInput = {
   jobId: string;
   notes: string;
+  expectedVersion?: number;
   clientActionId?: string;
   createdAtOnDevice?: string;
 };
@@ -77,5 +86,6 @@ export type SyncQueueContextValue = {
   refreshQueue: () => Promise<void>;
   retryQueuedActions: () => Promise<void>;
   retryQueueItem: (clientActionId: string) => Promise<void>;
+  discardQueueItem: (clientActionId: string) => Promise<void>;
   getQueuedCompletionForJob: (jobId: string) => SyncQueueItem | null;
 };

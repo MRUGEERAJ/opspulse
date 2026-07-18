@@ -359,9 +359,10 @@ work orders. React Router owns URL navigation, while an in-memory demo session
 only demonstrates protected navigation. It is not real authentication.
 
 The mobile app uses a root native stack for login, the authenticated app, and
-job detail. Bottom tabs own Jobs, Offline Queue, and Profile. Real token
-storage, assigned-job loading, offline persistence, camera, location, QR, and
-sync remain deferred.
+job detail. Bottom tabs own Jobs, Offline Queue, and Profile. It now supports
+real token storage, assigned-job loading, local job caching, offline completion
+queueing, retry visibility, and stale-version conflict handling. Camera,
+location, QR scanning, and proof uploads remain deferred.
 
 Both clients use small platform-specific `fetch` wrappers and shared health and
 error response types. Requests time out and expose errors, but they do not retry
@@ -377,6 +378,60 @@ Interview explanation:
 > access so the shells can grow without turning the root component into a large
 > dependency hub. Frontend route protection improves navigation UX, but the
 > backend remains responsible for authentication, roles, and ownership checks.
+
+### Offline Completion Sync Design
+
+The FieldAgent app stores completion actions locally when the API is unavailable
+or the user is viewing cached job data. Each queued completion includes the job
+id, notes, a client-generated `clientActionId`, the work order `expectedVersion`
+the agent reviewed, retry metadata, and local status.
+
+The backend handles replay with two protections:
+
+- Idempotency: `clientActionId` is checked first. If the same action already
+  completed the work order, the backend returns the current work order instead
+  of creating duplicate history or audit logs.
+- Optimistic concurrency: if the action was not already applied, the backend
+  compares `expectedVersion` with the current `WorkOrder.version`. A mismatch
+  returns `409 Conflict` because the offline action is stale.
+
+Retryable failures such as no internet, timeouts, `429`, and `5xx` stay
+`PENDING` because the same request may succeed later. Conflicts, validation
+errors, and forbidden actions become `FAILED` with a `failureKind`. Conflict
+items show `Refresh Job` and `Discard Action` instead of retrying the stale
+request unchanged. After refreshing, the agent reviews the latest server state
+and creates a new completion action with a new `clientActionId` and current
+version.
+
+```mermaid
+sequenceDiagram
+  participant Agent as FieldAgent App
+  participant Store as Local Queue
+  participant API as NestJS API
+  participant DB as PostgreSQL
+
+  Agent->>Store: Queue completion with clientActionId and expectedVersion
+  Agent->>API: Sync queued completion
+  API->>DB: Check existing completed audit log by clientActionId
+  alt Action already applied
+    DB-->>API: Existing completion found
+    API-->>Agent: Return current work order
+    Agent->>Store: Mark action SYNCED
+  else New action
+    API->>DB: Read current work order version/status
+    alt Version changed
+      API-->>Agent: 409 Conflict
+      Agent->>Store: Mark FAILED with failureKind CONFLICT
+      Agent->>API: Refresh job after user chooses Refresh Job
+      API-->>Agent: Latest work order
+      Agent->>Store: User may discard stale action
+    else Version matches
+      API->>DB: Complete work order, write history and audit log
+      API-->>Agent: Completed work order
+      Agent->>Store: Mark action SYNCED and update cached job
+    end
+  end
+```
 
 ### Why Monorepos Matter
 

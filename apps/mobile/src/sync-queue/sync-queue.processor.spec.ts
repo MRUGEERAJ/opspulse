@@ -35,6 +35,7 @@ describe('sync queue processor', () => {
       body: {
         notes: 'Completed inspection.',
         clientActionId: 'client-action-1',
+        expectedVersion: 3,
       },
     });
     await expect(readSyncQueue(OWNER)).resolves.toMatchObject([
@@ -60,16 +61,20 @@ describe('sync queue processor', () => {
     await expect(readSyncQueue(OWNER)).resolves.toMatchObject([
       {
         status: 'PENDING',
+        failureKind: 'RETRYABLE',
         attemptCount: 1,
         lastError: 'The API request timed out.',
       },
     ]);
   });
 
-  it('marks permanent failures as failed instead of retrying forever', async () => {
+  it('marks version conflicts as failed instead of retrying unchanged', async () => {
     await saveSyncQueue(OWNER, [buildQueueItem({ jobId: 'job-1' })]);
     const request = jest.fn(async () => {
-      throw new ApiError('Work order cannot transition.', 409);
+      throw new ApiError(
+        'This work order changed on the server after it was saved offline.',
+        409,
+      );
     });
 
     const result = await processSyncQueue({
@@ -81,8 +86,32 @@ describe('sync queue processor', () => {
     await expect(readSyncQueue(OWNER)).resolves.toMatchObject([
       {
         status: 'FAILED',
+        failureKind: 'CONFLICT',
         attemptCount: 1,
-        lastError: 'Work order cannot transition.',
+        lastError:
+          'This work order changed on the server after it was saved offline.',
+      },
+    ]);
+  });
+
+  it('marks validation failures as failed', async () => {
+    await saveSyncQueue(OWNER, [buildQueueItem({ jobId: 'job-1' })]);
+    const request = jest.fn(async () => {
+      throw new ApiError('notes must be longer than or equal to 3 characters', 400);
+    });
+
+    const result = await processSyncQueue({
+      owner: OWNER,
+      request: request as ProcessSyncQueueInput['request'],
+    });
+
+    expect(result.failedCount).toBe(1);
+    await expect(readSyncQueue(OWNER)).resolves.toMatchObject([
+      {
+        status: 'FAILED',
+        failureKind: 'VALIDATION',
+        attemptCount: 1,
+        lastError: 'notes must be longer than or equal to 3 characters',
       },
     ]);
   });
@@ -106,6 +135,7 @@ describe('sync queue processor', () => {
     await expect(readSyncQueue(OWNER)).resolves.toMatchObject([
       {
         status: 'PENDING',
+        failureKind: null,
         attemptCount: 1,
         lastError: 'Your session expired.',
       },
@@ -126,11 +156,13 @@ function buildQueueItem(input: Partial<SyncQueueItem>): SyncQueueItem {
     jobId: input.jobId ?? 'job-1',
     payload: input.payload ?? {
       notes: 'Completed inspection.',
+      expectedVersion: 3,
     },
     createdAtOnDevice:
       input.createdAtOnDevice ?? '2026-07-04T10:00:00.000Z',
     attemptCount: input.attemptCount ?? 0,
     status: input.status ?? 'PENDING',
+    failureKind: input.failureKind ?? null,
     lastError: input.lastError ?? null,
     lastAttemptedAt: input.lastAttemptedAt ?? null,
     syncedAt: input.syncedAt ?? null,

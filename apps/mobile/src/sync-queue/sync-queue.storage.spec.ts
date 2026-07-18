@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  discardSyncQueueItem,
   enqueueCompleteJobAction,
   readSyncQueue,
   saveSyncQueue,
@@ -38,6 +39,7 @@ describe('sync queue storage', () => {
     const first = await enqueueCompleteJobAction(OWNER, {
       jobId: 'job-1',
       notes: 'Completed inspection.',
+      expectedVersion: 3,
       createdAtOnDevice: '2026-07-04T10:00:00.000Z',
     });
     const second = await enqueueCompleteJobAction(OWNER, {
@@ -47,6 +49,7 @@ describe('sync queue storage', () => {
     });
 
     expect(first.wasCreated).toBe(true);
+    expect(first.item.payload.expectedVersion).toBe(3);
     expect(second.wasCreated).toBe(false);
     expect(second.item.clientActionId).toBe(first.item.clientActionId);
     await expect(readSyncQueue(OWNER)).resolves.toHaveLength(1);
@@ -66,6 +69,27 @@ describe('sync queue storage', () => {
     expect(result.items).toHaveLength(2);
   });
 
+  it('discards a failed queue item by client action id', async () => {
+    await saveSyncQueue(OWNER, [
+      buildQueueItem({
+        clientActionId: 'conflict-action-1',
+        jobId: 'job-1',
+        status: 'FAILED',
+        failureKind: 'CONFLICT',
+      }),
+      buildQueueItem({
+        clientActionId: 'pending-action-2',
+        jobId: 'job-2',
+      }),
+    ]);
+
+    const result = await discardSyncQueueItem(OWNER, 'conflict-action-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].clientActionId).toBe('pending-action-2');
+    await expect(readSyncQueue(OWNER)).resolves.toHaveLength(1);
+  });
+
   it('clears corrupted JSON and returns an empty queue', async () => {
     await AsyncStorage.setItem(CACHE_KEY, '{broken-json');
 
@@ -83,11 +107,13 @@ function buildQueueItem(input: Partial<SyncQueueItem>): SyncQueueItem {
     jobId: input.jobId ?? 'job-1',
     payload: input.payload ?? {
       notes: 'Completed inspection.',
+      expectedVersion: 3,
     },
     createdAtOnDevice:
       input.createdAtOnDevice ?? '2026-07-04T10:00:00.000Z',
     attemptCount: input.attemptCount ?? 0,
     status: input.status ?? 'PENDING',
+    failureKind: input.failureKind ?? null,
     lastError: input.lastError ?? null,
     lastAttemptedAt: input.lastAttemptedAt ?? null,
     syncedAt: input.syncedAt ?? null,

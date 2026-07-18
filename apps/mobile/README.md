@@ -1,18 +1,31 @@
 # OpsPulse Field Mobile App
 
-This package contains the bare React Native FieldAgent shell.
+This package contains the React Native FieldAgent app.
 
-## Current Shell
+## Current App
 
-- Development-only in-memory login.
+- Token-backed FieldAgent login.
 - Jobs, Offline Queue, and Profile tabs.
 - Typed Job Detail route.
 - Shared API health contract.
 - Manual API health retry.
 - `API_URL` through `react-native-config`.
+- Assigned-job loading and local cache fallback.
+- Offline completion queue with retryable failure and stale-version conflict
+  handling.
 
-Real authentication, token storage, assigned-job loading, offline persistence,
-camera, location, QR scanning, and synchronization are intentionally deferred.
+Camera, location, QR scanning, and proof upload are intentionally deferred.
+
+## Offline Completion Sync
+
+Queued completions store the current work order version as `expectedVersion`.
+During sync, the API first checks `clientActionId` idempotency and then rejects
+stale versions with `409 Conflict`.
+
+Retryable failures stay pending and can be retried. Conflict failures stay
+failed until the agent refreshes the job, reviews the latest server state, and
+submits a new completion action. The old conflicted action can be discarded from
+the Offline Queue.
 
 ## iOS Setup
 

@@ -172,7 +172,7 @@ export function JobDetailScreen({ route }: Props) {
 
     if (isShowingCachedData) {
       try {
-        await queueCompletion(notes, clientActionId);
+        await queueCompletion(notes, clientActionId, job.version);
       } catch (error) {
         setActionMessage(getJobDetailErrorMessage(error));
       }
@@ -184,7 +184,7 @@ export function JobDetailScreen({ route }: Props) {
       const updatedJob = await completeAssignedJob(
         authenticatedRequest,
         route.params.jobId,
-        { notes, clientActionId },
+        { notes, clientActionId, expectedVersion: job.version },
       );
       setJob(updatedJob);
       await cacheAssignedJob(updatedJob);
@@ -192,7 +192,7 @@ export function JobDetailScreen({ route }: Props) {
       setActionMessage('Job completed.');
     } catch (error) {
       if (isRetryableSyncError(error)) {
-        await queueCompletion(notes, clientActionId);
+        await queueCompletion(notes, clientActionId, job.version);
         return;
       }
 
@@ -202,11 +202,16 @@ export function JobDetailScreen({ route }: Props) {
     }
   }
 
-  async function queueCompletion(notes: string, clientActionId: string) {
+  async function queueCompletion(
+    notes: string,
+    clientActionId: string,
+    expectedVersion: number,
+  ) {
     const result = await enqueueCompleteJob({
       jobId: route.params.jobId,
       notes,
       clientActionId,
+      expectedVersion,
     });
 
     setCompletionNotes('');
@@ -409,7 +414,7 @@ export function JobDetailScreen({ route }: Props) {
 
 function getQueuedCompletionTitle(status: string): string {
   switch (status) {
-    case 'SYNCING':
+    case 'PROCESSING':
       return 'Completion syncing';
     case 'FAILED':
       return 'Completion sync failed';

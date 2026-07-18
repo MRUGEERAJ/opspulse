@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { processSyncQueue } from './sync-queue.processor';
 import {
+  discardSyncQueueItem,
   enqueueCompleteJobAction,
   markSyncQueueItemPending,
   readSyncQueue,
@@ -159,6 +160,14 @@ export function SyncQueueProvider({ children }: PropsWithChildren) {
     [refreshQueue, runProcessor],
   );
 
+  const discardQueueItem = useCallback(async (clientActionId: string) => {
+    if (!ownerRef.current) {
+      return;
+    }
+
+    setItems(await discardSyncQueueItem(ownerRef.current, clientActionId));
+  }, []);
+
   const getQueuedCompletionForJob = useCallback(
     (jobId: string) => findActiveCompleteJobAction(items, jobId),
     [items],
@@ -176,9 +185,11 @@ export function SyncQueueProvider({ children }: PropsWithChildren) {
       refreshQueue,
       retryQueuedActions,
       retryQueueItem,
+      discardQueueItem,
       getQueuedCompletionForJob,
     }),
     [
+      discardQueueItem,
       enqueueCompleteJob,
       failedCount,
       getQueuedCompletionForJob,

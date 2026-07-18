@@ -11,6 +11,7 @@ import type {
   SyncQueueItem,
 } from './sync-queue.types';
 import {
+  getSyncFailureKind,
   getSyncErrorMessage,
   isAuthenticationSyncError,
   isRetryableSyncError,
@@ -35,9 +36,10 @@ export async function processSyncQueue(
 
     await updateSyncQueueItem(input.owner, item.clientActionId, current => ({
       ...current,
-      status: 'SYNCING',
+      status: 'PROCESSING',
       attemptCount: current.attemptCount + 1,
       lastAttemptedAt: new Date().toISOString(),
+      failureKind: null,
       lastError: null,
     }));
 
@@ -45,6 +47,7 @@ export async function processSyncQueue(
       const updatedJob = await completeAssignedJob(input.request, item.jobId, {
         notes: item.payload.notes,
         clientActionId: item.clientActionId,
+        expectedVersion: item.payload.expectedVersion,
       });
       const syncedAt = new Date().toISOString();
 
@@ -52,6 +55,7 @@ export async function processSyncQueue(
       await updateSyncQueueItem(input.owner, item.clientActionId, current => ({
         ...current,
         status: 'SYNCED',
+        failureKind: null,
         lastError: null,
         syncedAt,
       }));
@@ -63,6 +67,7 @@ export async function processSyncQueue(
         await updateSyncQueueItem(input.owner, item.clientActionId, current => ({
           ...current,
           status: 'PENDING',
+          failureKind: null,
           lastError,
         }));
         break;
@@ -72,6 +77,7 @@ export async function processSyncQueue(
         await updateSyncQueueItem(input.owner, item.clientActionId, current => ({
           ...current,
           status: 'PENDING',
+          failureKind: 'RETRYABLE',
           lastError,
         }));
         continue;
@@ -80,6 +86,7 @@ export async function processSyncQueue(
       await updateSyncQueueItem(input.owner, item.clientActionId, current => ({
         ...current,
         status: 'FAILED',
+        failureKind: getSyncFailureKind(error),
         lastError,
       }));
       failedCount += 1;
@@ -99,10 +106,11 @@ async function resetStaleSyncingItems(
 ): Promise<SyncQueueItem[]> {
   const items = await readSyncQueue(owner);
   const resetItems = items.map(item =>
-    item.status === 'SYNCING'
+    item.status === 'PROCESSING'
       ? {
           ...item,
           status: 'PENDING' as const,
+          failureKind: 'RETRYABLE' as const,
           lastError: 'Sync was interrupted before the server confirmed it.',
         }
       : item,

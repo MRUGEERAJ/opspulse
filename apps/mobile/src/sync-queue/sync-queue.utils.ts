@@ -1,5 +1,5 @@
 import { ApiError } from '../shared/api/api-client';
-import type { SyncQueueItem } from './sync-queue.types';
+import type { SyncFailureKind, SyncQueueItem } from './sync-queue.types';
 
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 
@@ -38,6 +38,28 @@ export function isRetryableSyncError(error: unknown): boolean {
 
 export function isAuthenticationSyncError(error: unknown): boolean {
   return error instanceof ApiError && error.statusCode === 401;
+}
+
+export function getSyncFailureKind(error: unknown): SyncFailureKind {
+  if (isRetryableSyncError(error)) {
+    return 'RETRYABLE';
+  }
+
+  if (error instanceof ApiError) {
+    if (error.statusCode === 409) {
+      return 'CONFLICT';
+    }
+
+    if (error.statusCode === 403) {
+      return 'FORBIDDEN';
+    }
+
+    if (error.statusCode === 400) {
+      return 'VALIDATION';
+    }
+  }
+
+  return 'VALIDATION';
 }
 
 export function getSyncErrorMessage(error: unknown): string {

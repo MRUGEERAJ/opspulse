@@ -34,7 +34,13 @@ export async function readSyncQueue(
       return [];
     }
 
-    return parsed.items;
+    const items = parsed.items.map(normalizeSyncQueueItem);
+
+    if (items.some((item, index) => item !== parsed.items[index])) {
+      await saveSyncQueue(owner, items);
+    }
+
+    return items;
   } catch {
     await AsyncStorage.removeItem(storageKey);
     return [];
@@ -87,10 +93,14 @@ export async function enqueueCompleteJobAction(
     jobId: input.jobId,
     payload: {
       notes: input.notes,
+      ...(input.expectedVersion !== undefined
+        ? { expectedVersion: input.expectedVersion }
+        : {}),
     },
     createdAtOnDevice,
     attemptCount: 0,
     status: 'PENDING',
+    failureKind: null,
     lastError: null,
     lastAttemptedAt: null,
     syncedAt: null,
@@ -126,8 +136,21 @@ export async function markSyncQueueItemPending(
   return updateSyncQueueItem(owner, clientActionId, item => ({
     ...item,
     status: 'PENDING',
+    failureKind: null,
     lastError: null,
   }));
+}
+
+export async function discardSyncQueueItem(
+  owner: SyncQueueOwner,
+  clientActionId: string,
+): Promise<SyncQueueItem[]> {
+  const items = await readSyncQueue(owner);
+  const nextItems = items.filter(
+    item => item.clientActionId !== clientActionId,
+  );
+
+  return saveSyncQueue(owner, nextItems);
 }
 
 export async function getActiveCompleteJobAction(
@@ -195,9 +218,15 @@ function isSyncQueueItem(value: unknown): value is SyncQueueItem {
     typeof candidate.payload === 'object' &&
     candidate.payload !== null &&
     typeof candidate.payload.notes === 'string' &&
+    (!('expectedVersion' in candidate.payload) ||
+      candidate.payload.expectedVersion === undefined ||
+      typeof candidate.payload.expectedVersion === 'number') &&
     typeof candidate.createdAtOnDevice === 'string' &&
     typeof candidate.attemptCount === 'number' &&
     isSyncQueueStatus(candidate.status) &&
+    (!('failureKind' in candidate) ||
+      candidate.failureKind === null ||
+      isSyncFailureKind(candidate.failureKind)) &&
     (candidate.lastError === null || typeof candidate.lastError === 'string') &&
     (candidate.lastAttemptedAt === null ||
       typeof candidate.lastAttemptedAt === 'string') &&
@@ -208,8 +237,37 @@ function isSyncQueueItem(value: unknown): value is SyncQueueItem {
 function isSyncQueueStatus(value: unknown): boolean {
   return (
     value === 'PENDING' ||
+    value === 'PROCESSING' ||
     value === 'SYNCING' ||
     value === 'SYNCED' ||
     value === 'FAILED'
   );
+}
+
+function isSyncFailureKind(value: unknown): boolean {
+  return (
+    value === 'RETRYABLE' ||
+    value === 'CONFLICT' ||
+    value === 'VALIDATION' ||
+    value === 'FORBIDDEN'
+  );
+}
+
+function normalizeSyncQueueItem(item: SyncQueueItem): SyncQueueItem {
+  const legacyStatus = item.status as SyncQueueItem['status'] | 'SYNCING';
+  const status = legacyStatus === 'SYNCING' ? 'PROCESSING' : item.status;
+  const failureKind =
+    'failureKind' in item && item.failureKind !== undefined
+      ? item.failureKind
+      : null;
+
+  if (status === item.status && failureKind === item.failureKind) {
+    return item;
+  }
+
+  return {
+    ...item,
+    status,
+    failureKind,
+  };
 }

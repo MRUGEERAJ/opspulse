@@ -290,6 +290,31 @@ test("offline completion stores client action metadata", async () => {
   assert.equal(statusUpdate?.auditAction, "WORK_ORDER_COMPLETED");
 });
 
+test("offline completion rejects a stale expected version", async () => {
+  let updateWasCalled = false;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.IN_PROGRESS, 6),
+    updateStatus: async () => {
+      updateWasCalled = true;
+      return createWorkOrder(WorkOrderStatus.COMPLETED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  await assert.rejects(
+    service.complete(fieldAgentActor(), workOrderId, {
+      notes: "Completed generator inspection.",
+      clientActionId: "complete-offline-001",
+      expectedVersion: 5
+    }),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message ===
+        "This work order changed on the server after it was saved offline. Refresh the job before completing it again."
+  );
+  assert.equal(updateWasCalled, false);
+});
+
 test("retrying a completed offline action returns the current work order", async () => {
   let updateWasCalled = false;
   const repository = createRepository({
@@ -308,6 +333,29 @@ test("retrying a completed offline action returns the current work order", async
   });
 
   assert.equal(result.status, WorkOrderStatus.COMPLETED);
+  assert.equal(updateWasCalled, false);
+});
+
+test("retrying an already applied offline action skips stale version validation", async () => {
+  let updateWasCalled = false;
+  const repository = createRepository({
+    findById: async () => createWorkOrder(WorkOrderStatus.COMPLETED, 6),
+    hasCompletedClientAction: async () => true,
+    updateStatus: async () => {
+      updateWasCalled = true;
+      return createWorkOrder(WorkOrderStatus.COMPLETED);
+    }
+  });
+  const service = new WorkOrdersService(repository);
+
+  const result = await service.complete(fieldAgentActor(), workOrderId, {
+    notes: "Completed generator inspection.",
+    clientActionId: "complete-offline-001",
+    expectedVersion: 5
+  });
+
+  assert.equal(result.status, WorkOrderStatus.COMPLETED);
+  assert.equal(result.version, 6);
   assert.equal(updateWasCalled, false);
 });
 
@@ -504,7 +552,7 @@ function createActor(userId: string, role: UserRole): AuthenticatedActor {
   };
 }
 
-function createWorkOrder(status: WorkOrderStatus): WorkOrder {
+function createWorkOrder(status: WorkOrderStatus, version = 1): WorkOrder {
   return {
     id: workOrderId,
     organizationId,
@@ -519,7 +567,7 @@ function createWorkOrder(status: WorkOrderStatus): WorkOrder {
     requiresProofPhoto: true,
     requiresLocation: false,
     requiresQrScan: false,
-    version: 1,
+    version,
     createdById: "20000000-0000-4000-8000-000000000001",
     createdAt: new Date("2026-06-24T00:00:00.000Z"),
     updatedAt: new Date("2026-06-24T00:00:00.000Z")

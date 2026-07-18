@@ -39,6 +39,9 @@ const EDITABLE_STATUSES = new Set<WorkOrderStatus>([
   WorkOrderStatus.ASSIGNED
 ]);
 
+const STALE_OFFLINE_COMPLETION_MESSAGE =
+  "This work order changed on the server after it was saved offline. Refresh the job before completing it again.";
+
 @Injectable()
 export class WorkOrdersService {
   constructor(private readonly workOrdersRepository: WorkOrdersRepository) {}
@@ -242,21 +245,27 @@ export class WorkOrdersService {
     dto: CompleteWorkOrderDto
   ) {
     assertFieldAgent(actor);
+    const workOrder = await this.findOrThrow(actor.organizationId, id);
 
     if (dto.clientActionId) {
-      const workOrder = await this.findOrThrow(actor.organizationId, id);
-
-      if (
-        workOrder.status === WorkOrderStatus.COMPLETED &&
-        (await this.workOrdersRepository.hasCompletedClientAction({
+      const wasAlreadyApplied =
+        await this.workOrdersRepository.hasCompletedClientAction({
           organizationId: actor.organizationId,
           actorUserId: actor.userId,
           workOrderId: id,
           clientActionId: dto.clientActionId
-        }))
-      ) {
+        });
+
+      if (wasAlreadyApplied) {
         return toWorkOrderResponse(workOrder);
       }
+    }
+
+    if (
+      dto.expectedVersion !== undefined &&
+      dto.expectedVersion !== workOrder.version
+    ) {
+      throw new ConflictException(STALE_OFFLINE_COMPLETION_MESSAGE);
     }
 
     return this.updateStatus(actor, id, {

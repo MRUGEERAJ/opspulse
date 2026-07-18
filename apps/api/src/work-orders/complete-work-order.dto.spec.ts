@@ -9,7 +9,8 @@ import { CompleteWorkOrderDto } from "./dto/complete-work-order.dto.js";
 test("CompleteWorkOrderDto trims valid notes", async () => {
   const dto = plainToInstance(CompleteWorkOrderDto, {
     notes: "  Completed generator inspection.  ",
-    clientActionId: "  complete-offline-001  "
+    clientActionId: "  complete-offline-001  ",
+    expectedVersion: "5"
   });
 
   const errors = await validate(dto);
@@ -17,6 +18,7 @@ test("CompleteWorkOrderDto trims valid notes", async () => {
   assert.equal(errors.length, 0);
   assert.equal(dto.notes, "Completed generator inspection.");
   assert.equal(dto.clientActionId, "complete-offline-001");
+  assert.equal(dto.expectedVersion, 5);
 });
 
 test("CompleteWorkOrderDto rejects invalid completion notes at runtime", async () => {
@@ -57,6 +59,25 @@ test("CompleteWorkOrderDto rejects invalid clientActionId", async () => {
       errors.some((error) => error.property === "clientActionId"),
       `Expected clientActionId validation error for ${JSON.stringify(
         clientActionId
+      )}`
+    );
+  }
+});
+
+test("CompleteWorkOrderDto rejects invalid expectedVersion", async () => {
+  const invalidExpectedVersions = [0, -1, 1.5, "abc"];
+
+  for (const expectedVersion of invalidExpectedVersions) {
+    const dto = plainToInstance(CompleteWorkOrderDto, {
+      notes: "Completed generator inspection.",
+      expectedVersion
+    });
+    const errors = await validate(dto);
+
+    assert.ok(
+      errors.some((error) => error.property === "expectedVersion"),
+      `Expected expectedVersion validation error for ${JSON.stringify(
+        expectedVersion
       )}`
     );
   }

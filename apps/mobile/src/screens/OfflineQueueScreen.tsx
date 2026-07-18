@@ -1,4 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback } from 'react';
 import {
   ActivityIndicator,
@@ -12,9 +13,14 @@ import { Screen } from '../shared/components/Screen';
 import { colors } from '../shared/theme';
 import { useSyncQueue } from '../sync-queue/SyncQueueContext';
 import type { SyncQueueItem } from '../sync-queue/sync-queue.types';
+import type { RootStackParamList } from '../navigation/navigation.types';
+
+type OfflineQueueNavigation = NativeStackNavigationProp<RootStackParamList>;
 
 export function OfflineQueueScreen() {
+  const navigation = useNavigation<OfflineQueueNavigation>();
   const {
+    discardQueueItem,
     failedCount,
     isProcessing,
     items,
@@ -23,6 +29,8 @@ export function OfflineQueueScreen() {
     retryQueueItem,
     retryQueuedActions,
   } = useSyncQueue();
+  const retryableItemCount = items.filter(item => item.status === 'PENDING')
+    .length;
 
   useFocusEffect(
     useCallback(() => {
@@ -44,7 +52,7 @@ export function OfflineQueueScreen() {
       </View>
 
       <PrimaryButton
-        disabled={isProcessing || pendingCount === 0}
+        disabled={isProcessing || retryableItemCount === 0}
         label={isProcessing ? 'Syncing...' : 'Retry Sync'}
         onPress={() => {
           retryQueuedActions();
@@ -66,6 +74,15 @@ export function OfflineQueueScreen() {
             <QueueItemCard
               key={item.clientActionId}
               item={item}
+              onDiscard={() => {
+                discardQueueItem(item.clientActionId);
+              }}
+              onRefreshJob={() => {
+                navigation.navigate('JobDetail', {
+                  jobId: item.jobId,
+                  title: 'Job Detail',
+                });
+              }}
               onRetry={() => {
                 retryQueueItem(item.clientActionId);
               }}
@@ -88,11 +105,17 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 
 function QueueItemCard({
   item,
+  onDiscard,
+  onRefreshJob,
   onRetry,
 }: {
   item: SyncQueueItem;
+  onDiscard: () => void;
+  onRefreshJob: () => void;
   onRetry: () => void;
 }) {
+  const isConflict = item.failureKind === 'CONFLICT';
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -102,18 +125,56 @@ function QueueItemCard({
 
       <DetailRow label="Job ID" value={item.jobId} />
       <DetailRow label="Client action" value={item.clientActionId} />
+      <DetailRow
+        label="Expected version"
+        value={
+          item.payload.expectedVersion === undefined
+            ? 'Not captured'
+            : String(item.payload.expectedVersion)
+        }
+      />
       <DetailRow label="Created" value={formatDate(item.createdAtOnDevice)} />
       <DetailRow label="Attempts" value={String(item.attemptCount)} />
 
+      {isConflict && (
+        <Text style={styles.conflictText}>
+          Refresh the job and review the latest server state before completing
+          it again.
+        </Text>
+      )}
+
       {item.lastError && <Text style={styles.errorText}>{item.lastError}</Text>}
 
-      {item.status === 'FAILED' && (
+      {isConflict ? (
+        <View style={styles.buttonRow}>
+          <View style={styles.buttonCell}>
+            <PrimaryButton
+              label="Refresh Job"
+              variant="secondary"
+              onPress={onRefreshJob}
+            />
+          </View>
+          <View style={styles.buttonCell}>
+            <PrimaryButton
+              label="Discard Action"
+              variant="secondary"
+              onPress={onDiscard}
+            />
+          </View>
+        </View>
+      ) : item.status === 'FAILED' ? (
+        <PrimaryButton
+          label="Discard Action"
+          variant="secondary"
+          onPress={onDiscard}
+        />
+      ) : item.status === 'PENDING' && item.failureKind === 'RETRYABLE' ? (
         <PrimaryButton
           label="Retry item"
           variant="secondary"
           onPress={onRetry}
         />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -140,7 +201,7 @@ function EmptyQueueState() {
 
 function formatStatus(item: SyncQueueItem): string {
   switch (item.status) {
-    case 'SYNCING':
+    case 'PROCESSING':
       return 'Syncing';
     case 'SYNCED':
       return 'Synced';
@@ -307,6 +368,18 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.errorText,
     lineHeight: 21,
+  },
+  conflictText: {
+    color: colors.text,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  buttonCell: {
+    flex: 1,
   },
   emptyState: {
     gap: 8,
